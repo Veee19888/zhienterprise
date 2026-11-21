@@ -1,0 +1,69 @@
+import type { Component } from 'vue'
+import HeroSection from './HeroSection.vue'
+import MetricsSection from './MetricsSection.vue'
+import BizCardsSection from './BizCardsSection.vue'
+import SolutionsSection from './SolutionsSection.vue'
+import OutcomesSection from './OutcomesSection.vue'
+import LogosWallSection from './LogosWallSection.vue'
+import NewsSection from './NewsSection.vue'
+import CtaSection from './CtaSection.vue'
+import RichTextSection from './RichTextSection.vue'
+import FaqSection from './FaqSection.vue'
+import ChannelsSection from './ChannelsSection.vue'
+import HonorsSection from './HonorsSection.vue'
+import HistorySection from './HistorySection.vue'
+import ContactInfoSection from './ContactInfoSection.vue'
+
+/**
+ * 模块组件注册表：section.type → 组件。
+ *
+ * 前向兼容：builder 页数据里出现未注册的 type 时渲染层跳过该模块，
+ * 旧数据不受新模块上线影响；新模块上线只需在此注册。
+ */
+export const SECTION_REGISTRY: Record<string, Component> = {
+  hero: HeroSection,
+  metrics: MetricsSection,
+  'biz-cards': BizCardsSection,
+  solutions: SolutionsSection,
+  outcomes: OutcomesSection,
+  logos: LogosWallSection,
+  news: NewsSection,
+  cta: CtaSection,
+  'rich-text': RichTextSection,
+  faq: FaqSection,
+  channels: ChannelsSection,
+  honors: HonorsSection,
+  history: HistorySection,
+  'contact-info': ContactInfoSection
+}
+
+export interface SiteSection {
+  type: string
+  config?: Record<string, any>
+  visible?: boolean
+}
+
+/** 解析 zhi_page.sections（JSON 字符串），过滤不可见/未注册的模块 */
+export function parseSections(raw: unknown): (SiteSection & { component: Component })[] {
+  let list: unknown = raw
+  if (typeof raw === 'string') {
+    try {
+      list = JSON.parse(raw)
+    } catch {
+      list = []
+    }
+  }
+  if (!Array.isArray(list)) return []
+  return (
+    list as (Omit<SiteSection, 'visible'> & {
+      visible?: boolean | number | string
+    })[]
+  )
+    .filter(s => {
+      if (!s || typeof s.type !== 'string' || !SECTION_REGISTRY[s.type]) return false
+      // visible 兼容三种形态：false / 0 / '0' 均视为隐藏（历史数据可能写数字或字符串）
+      const v = s.visible
+      return v !== false && v !== 0 && v !== '0'
+    })
+    .map(s => ({ ...s, visible: true as const, component: SECTION_REGISTRY[s.type] as any }))
+}

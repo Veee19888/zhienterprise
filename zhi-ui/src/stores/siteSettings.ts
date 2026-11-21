@@ -1,0 +1,186 @@
+import { defineStore } from 'pinia'
+import { isSwitchOn } from '@/utils/featureSwitch'
+import { cssColorToHex } from '@/utils/theme'
+import { processAvatarUrl } from '@/api/site/avatar'
+
+interface SiteSettingsState {
+  blog_name: string
+  blog_desc: string
+  blog_avatar: string | null
+  /** 自定义站点 Logo（优先级高于站点头像 blog_avatar） */
+  site_logo: string
+  /** 首页 Banner 大图（企业官网模板 Hero 使用；为空回退母题插画） */
+  site_banner: string
+  blog_copyright: string
+  blog_beian: string
+  /** 统计/第三方脚本（仅前台公开页面注入） */
+  custom_js: string
+  comment_enabled: boolean
+  comment_review: boolean
+  view_count_enabled: boolean
+  search_enabled: boolean
+  footer_enabled: boolean
+  copyright_enabled: boolean
+  beian_enabled: boolean
+  friend_link_apply_enabled: boolean
+  guestbook_enabled: boolean
+  home_page_slug: string
+  nav_category_enabled: boolean
+  nav_tag_enabled: boolean
+  home_layout: string
+  business_label: string
+  contact_phone: string
+  contact_address: string
+  /** 联系邮箱（联系我们页展示） */
+  contact_email: string
+  site_template: string
+  /** 主题颜色（公开接口下发；企业官网模板作用域内仍以模板主色为准） */
+  theme_color: string
+  // 官网内容（JSON 数组字符串，「官网内容」页签维护，解析与回退见 utils/siteContent.ts）
+  site_metrics: string
+  site_outcomes: string
+  home_solutions: string
+  site_channels: string
+  site_faq: string
+  site_honors: string
+  site_history: string
+  site_page_copy: string
+  user_agreement_content: string
+  privacy_policy_content: string
+  skills?: string[]
+}
+
+interface SiteSettingsStoreState {
+  siteSettings: SiteSettingsState
+  lastUpdate: number
+}
+
+export const useSiteSettingsStore = defineStore('siteSettings', {
+  state: (): SiteSettingsStoreState => ({
+    siteSettings: {
+      // 基本设置
+      blog_name: '知企建站系统',
+      blog_desc: '欢迎来到我的站点',
+      blog_avatar: null,
+      site_logo: '',
+      site_banner: '',
+      blog_copyright: '',
+      blog_beian: '',
+      custom_js: '',
+
+      // 功能设置
+      // 企业官网定位：评论默认关闭（与 SQL 种子 / 后台默认一致）
+      comment_enabled: false,
+      comment_review: true,
+      view_count_enabled: true,
+      search_enabled: true,
+      footer_enabled: true,
+      copyright_enabled: true,
+      beian_enabled: false,
+      friend_link_apply_enabled: false,
+      guestbook_enabled: false,
+
+      // 企业官网模式：首页接管 + 导航裁剪 + 企业首页模板/核心业务
+      home_page_slug: '',
+      nav_category_enabled: true,
+      nav_tag_enabled: true,
+      home_layout: 'business',
+      business_label: '核心业务',
+      contact_phone: '',
+      contact_address: '',
+      contact_email: '',
+      site_template: 'consult',
+      theme_color: '',
+      site_metrics: '',
+      site_outcomes: '',
+      home_solutions: '',
+      site_channels: '',
+      site_faq: '',
+      site_honors: '',
+      site_history: '',
+      site_page_copy: '',
+
+      // 其他设置
+      user_agreement_content: '',
+      privacy_policy_content: ''
+    },
+    lastUpdate: 0
+  }),
+
+  getters: {
+    getSiteAvatar: (state: SiteSettingsStoreState) => {
+      const avatar = state.siteSettings.blog_avatar
+
+      if (!avatar || !avatar.trim()) {
+        // 默认头像占位：底色跟随当前主色（主题色 / 行业模板主色），
+        // 避免固定 #409EFF 在换肤后显得突兀
+        const primary =
+          typeof getComputedStyle === 'function'
+            ? getComputedStyle(document.documentElement).getPropertyValue('--el-color-primary')
+            : ''
+        const fill = encodeURIComponent(cssColorToHex(primary))
+        return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='${fill}' rx='40'/%3E%3Ccircle cx='40' cy='30' r='14' fill='white'/%3E%3Cellipse cx='40' cy='58' rx='20' ry='16' fill='white'/%3E%3C/svg%3E`
+      }
+
+      try {
+        const timestamp = state.lastUpdate || Date.now()
+        let finalUrl = processAvatarUrl(avatar)
+
+        const separator = finalUrl.includes('?') ? '&' : '?'
+        finalUrl = `${finalUrl}${separator}t=${timestamp}`
+
+        return finalUrl
+      } catch (error) {
+        console.error('处理头像URL失败:', error)
+        return "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='%23409EFF' rx='40'/%3E%3Ccircle cx='40' cy='30' r='14' fill='white'/%3E%3Cellipse cx='40' cy='58' rx='20' ry='16' fill='white'/%3E%3C/svg%3E"
+      }
+    },
+
+    getSiteName: (state: SiteSettingsStoreState) => state.siteSettings.blog_name || '知企建站系统',
+
+    // 功能开关辅助方法（全站唯一判定口径）：
+    // 只有 false / 'false' / '0' / 0 视为关闭，未设置或 true / 'true' / '1' / 1 视为开启
+    isFeatureEnabled: (state: SiteSettingsStoreState) => (feature: string) => {
+      // 口径统一在 utils/featureSwitch.ts（与后端 SiteSwitchUtils.isOn 一致）
+      return isSwitchOn(state.siteSettings[feature])
+    }
+  },
+
+  actions: {
+    updateSiteSettings(newSettings: Partial<SiteSettingsState>): void {
+      this.siteSettings = { ...this.siteSettings, ...newSettings }
+      this.lastUpdate = Date.now()
+    },
+
+    setSiteSettings(settings: SiteSettingsState): void {
+      this.siteSettings = settings
+      this.lastUpdate = Date.now()
+    },
+
+    async refreshFromAdmin(): Promise<boolean> {
+      try {
+        const { listSetting } = await import('@/api/admin/setting')
+        const response = await listSetting({ pageSize: 100 })
+
+        if (response && response.code === 200) {
+          const settings = response.rows || []
+          const newSettings: Record<string, any> = {}
+
+          settings.forEach((setting: any) => {
+            const key = setting.settingKey || setting.configKey
+            const value = setting.settingValue || setting.configValue
+            if (key) {
+              newSettings[key] = value
+            }
+          })
+
+          this.updateSiteSettings(newSettings as Partial<SiteSettingsState>)
+          return true
+        }
+      } catch (error) {
+        console.error('从后台刷新站点设置失败:', error)
+      }
+      return false
+    }
+  }
+})

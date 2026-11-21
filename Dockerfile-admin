@@ -1,0 +1,55 @@
+# 构建阶段 - 使用支持 ARM64 的基础镜像
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
+
+WORKDIR /app
+
+# 复制 pom.xml 并下载依赖（利用 Docker 缓存）
+COPY pom.xml .
+COPY zhi-common/pom.xml zhi-common/
+COPY zhi-framework/pom.xml zhi-framework/
+COPY zhi-system/pom.xml zhi-system/
+COPY zhi-quartz/pom.xml zhi-quartz/
+COPY zhi-generator/pom.xml zhi-generator/
+COPY zhi-admin/pom.xml zhi-admin/
+
+# 下载依赖到本地仓库
+RUN mvn dependency:go-offline -B
+
+# 复制源代码
+COPY . .
+
+# 编译项目并清理 Maven 缓存
+RUN mvn clean package -Dmaven.test.skip=true -Dmaven.compiler.parameters=true -Dmaven.resources.filtering=true \
+    && rm -rf /root/.m2/repository
+
+# 运行阶段 - 使用支持 ARM64 的 JRE 镜像
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+# 设置时区并安装健康检查所需工具
+ENV TZ=Asia/Shanghai
+RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制编译好的 JAR 包
+COPY --from=builder /app/zhi-admin/target/zhi-admin.jar /app/zhi-admin.jar
+
+# 创建上传与日志目录（/app/logs 由 admin_logs 命名卷挂载，需在镜像里先建好并授权）
+RUN mkdir -p /app/uploadPath /app/logs \
+    && chmod 755 /app/uploadPath /app/logs
+
+# 创建非 root 用户运行应用（安全最佳实践）
+RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser \
+    && chown -R appuser:appuser /app
+
+# 入口脚本以 root 修正日志卷（命名卷可能是 root 属主）后降权到 appuser 运行
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# 启动命令
+CMD ["java", "-jar", "/app/zhi-admin.jar"]

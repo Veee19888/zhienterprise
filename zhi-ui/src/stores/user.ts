@@ -1,0 +1,115 @@
+import { defineStore } from 'pinia'
+import { unifiedLogin, getUserInfo } from '@/api/unifiedAuth'
+import { logout } from '@/api/login'
+import { getToken, setToken, removeToken } from '@/utils/auth'
+import defaultAvatar from '@/assets/images/profile.jpg'
+
+interface UserInfo {
+  username: string
+  password: string
+  code?: string
+  uuid?: string
+  rememberMe?: boolean
+}
+
+interface UserState {
+  token: string
+  userId?: number | string
+  name: string
+  nickName: string
+  avatar: string
+  roles: string[]
+  permissions: string[]
+  userType: string
+}
+
+export const useUserStore = defineStore('user', {
+  state: (): UserState => ({
+    token: getToken() || '',
+    userId: undefined,
+    name: '',
+    nickName: '',
+    avatar: '',
+    roles: [],
+    permissions: [],
+    userType: ''
+  }),
+
+  actions: {
+    /**
+     * 登录
+     */
+    async login(userInfo: UserInfo): Promise<void> {
+      const username = userInfo.username.trim()
+      const { password, code, uuid, rememberMe } = userInfo
+      const res = await unifiedLogin({ username, password, code, uuid, rememberMe })
+      // 统一登录接口将 token 放在 data 中（兼容平铺返回）
+      const token = res?.data?.token || res?.token
+      if (!token) {
+        throw new Error('登录失败：未获取到token')
+      }
+      setToken(token, rememberMe)
+      this.token = token
+    },
+
+    /**
+     * 获取用户信息
+     */
+    async getInfo(): Promise<any> {
+      const res = await getUserInfo()
+      const data = res?.data || res
+
+      // 匿名访问（401 拦截器返回的占位响应）：直接返回，不修改状态
+      if (!data || !data.user) {
+        return res
+      }
+
+      const user = data.user
+      const avatar =
+        user.avatar == '' || user.avatar == null
+          ? defaultAvatar
+          : (import.meta.env?.VITE_APP_BASE_API || '/dev-api') + user.avatar
+
+      if (data.roles && data.roles.length > 0) {
+        this.roles = data.roles
+        this.permissions = data.permissions
+      } else {
+        this.roles = ['ROLE_DEFAULT']
+      }
+      this.userId = user.userId
+      this.name = user.userName
+      this.nickName = user.nickName || user.userName || ''
+      this.avatar = avatar
+
+      // 确保 userType 是字符串格式，优先从 data.userType 读取，其次从 user.userType 读取
+      // 如果都没有，默认为 '01'（普通用户）而非 '00'（管理员）
+      const rawUserType = data.userType ?? user.userType
+      this.userType = rawUserType != null ? String(rawUserType) : '01'
+
+      const token = getToken()
+      if (token && token !== this.token) {
+        this.token = token
+      }
+      return res
+    },
+
+    /**
+     * 退出系统
+     */
+    logOut(): Promise<void> {
+      return new Promise((resolve, reject) => {
+        logout()
+          .then(() => {
+            this.token = ''
+            this.roles = []
+            this.permissions = []
+            removeToken()
+            resolve()
+          })
+          .catch(error => {
+            reject(error)
+          })
+      })
+    }
+  }
+})

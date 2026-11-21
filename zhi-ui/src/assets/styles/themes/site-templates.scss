@@ -1,0 +1,321 @@
+/* ===== 企业官网 · 5 套行业模板 · 变量层 =====
+   设计出处：docs/design/templates/{base.css,themes.css}（两层分离架构）。
+   基类 .tpl-site 提供共用默认（base.css :root），.tpl-xxx 只覆盖差异
+   （主色 / 圆角 / 阴影 / 深色底 / 标题字体）——与原型"改组件改一次，
+   五套同时生效"的约束一致。
+   组件层：views/site/EnterpriseHome.vue（五套共用，不感知模板差异）。
+   挂载：前台布局在 home_layout=business 时给 <html> 挂 .tpl-site + .tpl-xxx。
+
+   ⚠️ 变量声明必须落在 html.tpl-site / html.tpl-xxx 上：
+   各内页根节点也带 .tpl-site 类（`.tpl-site contact-page` 等），若把基类变量
+   声明在 `.tpl-site` 上，页面根节点会重新声明基类值（默认蓝/圆角 16px），
+   覆盖掉 <html> 继承下来的模板值 —— 表现为只有首页换肤、内页仍是默认蓝。 */
+
+/* ---------- 基类：共用默认（base.css :root） ---------- */
+html.tpl-site {
+  --tpl-p: #1a56db;
+  --tpl-p-h: #1544b0;
+  --tpl-p-sub: #eef3fe;
+  --tpl-p-text: #1a56db;
+  --tpl-p-d: #5b8def;
+  --tpl-accent: #ff6b35;
+  --tpl-ink-900: #0b0f19;
+  --tpl-ink-700: #1f2937;
+  --tpl-ink-500: #4b5563;
+  --tpl-ink-400: #6b7280;
+  --tpl-border: #e5e7eb;
+  --tpl-surface: #f7f8fa;
+  --tpl-bg: #fff;
+  --tpl-white: #fff;
+  --tpl-dark: #0b0f19;
+  --tpl-dark-2: #141b2a;
+  --tpl-dark-dim: #9ca3af;
+  /* 透明导航（over-hero）浮于 Hero 之上的文字色：独立令牌，
+     禁止直接用 --tpl-white（深浅模式约定见 dark-mode-tokens 测试）。
+     ⚠️ 该令牌必须随深浅模式取值：企业模板的 .eh-hero 在亮色下是**浅底**
+     （见下方 html:not(.dark) 覆盖），此时反白会让导航与 Hero 同色（实测 1.04:1，整块不可见）。
+     亮色用深墨（--tpl-ink-900），暗色才用白。 */
+  --tpl-on-hero: #ffffff;
+  --tpl-grid: 1280px;
+  --tpl-r-sm: 6px;
+  --tpl-r-md: 10px;
+  --tpl-r-lg: 16px;
+  --tpl-r-xl: 24px;
+  --tpl-sh-sm: 0 1px 2px rgba(11, 15, 25, 0.06), 0 1px 3px rgba(11, 15, 25, 0.04);
+  --tpl-sh-md: 0 8px 24px rgba(11, 15, 25, 0.1), 0 2px 6px rgba(11, 15, 25, 0.04);
+  --tpl-serif: inherit;
+
+  /* 前台 Element Plus 主色跟随行业模板：站点页面里的输入框/分页/按钮与 --tpl-p 一致。
+     !important 用于覆盖「界面主题 → 主题颜色」通过 handleThemeStyle 写入 <html> 的内联
+     --el-color-primary（后台不受影响，仍用主题色）。light-* 与 --tpl-bg 混合，
+     深浅模式各自得到对应档位。 */
+  --el-color-primary: var(--tpl-p) !important;
+  --el-color-primary-light-3: color-mix(in srgb, var(--tpl-p) 72%, var(--tpl-bg)) !important;
+  --el-color-primary-light-5: color-mix(in srgb, var(--tpl-p) 55%, var(--tpl-bg)) !important;
+  --el-color-primary-light-7: color-mix(in srgb, var(--tpl-p) 38%, var(--tpl-bg)) !important;
+  --el-color-primary-light-8: color-mix(in srgb, var(--tpl-p) 28%, var(--tpl-bg)) !important;
+  --el-color-primary-light-9: color-mix(in srgb, var(--tpl-p) 16%, var(--tpl-bg)) !important;
+  --el-color-primary-dark-2: color-mix(in srgb, var(--tpl-p) 82%, #000) !important;
+}
+
+/* 亮色模式下 Hero 是浅底，透明导航不能再反白 —— 用深墨保证对比度。
+   暗色模式不覆盖此令牌，保持基类 #ffffff（深底 + 白字）。
+   选择器需同时覆盖 <html> 与页面根容器，理由同下方深色重映射块。 */
+html:not(.dark) .tpl-site,
+html:not(.dark).tpl-site {
+  --tpl-on-hero: var(--tpl-ink-900);
+}
+
+/* 尚未迁移到 --tpl-* 的旧页面（搜索/分类/标签/自定义页正文/协议/留言板/友链申请）
+   在页面根节点挂 .tpl-legacy，把 --mo-* 色阶指到模板令牌，使这些页面随行业模板换色。
+   作用域在页面根节点而非 .site-layout：theme-dark.css 会给 .site-layout 重映射 --mo-*，
+   若挂在布局外层会被更近的深色映射覆盖。 */
+html.tpl-site:not(.dark) .tpl-legacy {
+  --mo-n0: var(--tpl-bg);
+  --mo-n50: var(--tpl-surface);
+  --mo-n100: color-mix(in srgb, var(--tpl-ink-900) 5%, var(--tpl-bg));
+  --mo-n200: var(--tpl-border);
+  --mo-n300: color-mix(in srgb, var(--tpl-ink-400) 45%, var(--tpl-bg));
+  --mo-n400: var(--tpl-ink-400);
+  --mo-n500: var(--tpl-ink-500);
+  --mo-n600: var(--tpl-ink-500);
+  --mo-n700: var(--tpl-ink-700);
+  --mo-n800: var(--tpl-ink-700);
+  --mo-n900: var(--tpl-ink-900);
+  --mo-p50: var(--tpl-p-sub);
+  --mo-p100: color-mix(in srgb, var(--tpl-p) 20%, var(--tpl-bg));
+  --mo-p200: color-mix(in srgb, var(--tpl-p) 30%, var(--tpl-bg));
+  --mo-p300: color-mix(in srgb, var(--tpl-p) 50%, var(--tpl-bg));
+  --mo-p400: color-mix(in srgb, var(--tpl-p) 70%, var(--tpl-bg));
+  --mo-p500: var(--tpl-p);
+  --mo-p600: var(--tpl-p);
+  --mo-p700: var(--tpl-p-text);
+  --mo-p800: var(--tpl-p-h);
+  --mo-primary-text: var(--tpl-p-text);
+  --mo-on-primary: var(--tpl-white);
+  --mo-r-sm: var(--tpl-r-sm);
+  --mo-r-md: var(--tpl-r-md);
+  --mo-r-lg: var(--tpl-r-lg);
+  --mo-shadow-sm: var(--tpl-sh-sm);
+  --mo-shadow-md: var(--tpl-sh-md);
+  --mo-font-serif: var(--tpl-serif);
+}
+
+/* 深色模式沿用 --mo-* 的深色契约：n0/n50/n800/n900 是底色，n100/n200/n600 是文字，
+   n300/n400/n500 是次要文字（见 theme-dark.css）。不能用亮色映射（n900=文字色），
+   否则页面里的 `html.dark ... background: var(--mo-n900)` 会变成浅底。 */
+html.dark.tpl-site .tpl-legacy {
+  --mo-n0: var(--tpl-bg);
+  --mo-n50: var(--tpl-surface);
+  --mo-n800: color-mix(in srgb, var(--tpl-bg) 82%, #000);
+  --mo-n900: var(--tpl-bg);
+  --mo-n100: var(--tpl-ink-900);
+  --mo-n200: var(--tpl-ink-700);
+  --mo-n600: var(--tpl-ink-700);
+  --mo-n300: var(--tpl-ink-500);
+  --mo-n400: var(--tpl-ink-500);
+  --mo-n500: var(--tpl-ink-500);
+  --mo-p50: var(--tpl-p-sub);
+  --mo-p100: color-mix(in srgb, var(--tpl-p) 20%, var(--tpl-bg));
+  --mo-p200: color-mix(in srgb, var(--tpl-p) 30%, var(--tpl-bg));
+  --mo-p300: var(--tpl-p-d);
+  --mo-p400: var(--tpl-p-d);
+  --mo-p500: var(--tpl-p);
+  --mo-p600: var(--tpl-p);
+  --mo-p700: var(--tpl-p-d);
+  --mo-p800: var(--tpl-p-h);
+  --mo-primary-text: var(--tpl-p-text);
+  --mo-on-primary: var(--tpl-white);
+  --mo-r-sm: var(--tpl-r-sm);
+  --mo-r-md: var(--tpl-r-md);
+  --mo-r-lg: var(--tpl-r-lg);
+  --mo-shadow-sm: var(--tpl-sh-sm);
+  --mo-shadow-md: var(--tpl-sh-md);
+  --mo-font-serif: var(--tpl-serif);
+}
+
+/* ---------- 1. 管理咨询：指针罗盘 · 方向与决断 ---------- */
+html.tpl-consult {
+  --tpl-p: #185fa5;
+  --tpl-p-h: #123f73;
+  --tpl-p-sub: #e6f1fb;
+  --tpl-p-text: #185fa5;
+  --tpl-p-d: #85b7eb;
+  --tpl-accent: #c2410c;
+  --tpl-r-sm: 4px;
+  --tpl-r-md: 6px;
+  --tpl-r-lg: 8px;
+  --tpl-r-xl: 12px;
+  --tpl-serif: 'Noto Serif SC', Georgia, serif;
+}
+
+/* ---------- 2. 信息技术：节点连接 · 架构与连接 ---------- */
+html.tpl-tech {
+  --tpl-p: #0f6e56;
+  --tpl-p-h: #0a5341;
+  --tpl-p-sub: #e1f5ee;
+  --tpl-p-text: #0f6e56;
+  --tpl-p-d: #5dcaa5;
+  --tpl-accent: #e9a23b;
+  --tpl-r-sm: 6px;
+  --tpl-r-md: 10px;
+  --tpl-r-lg: 16px;
+  --tpl-r-xl: 24px;
+}
+
+/* ---------- 3. 制造业：模块榫接 · 结构与咬合 ---------- */
+html.tpl-mfg {
+  --tpl-p: #b0442a;
+  --tpl-p-h: #8a3420;
+  --tpl-p-sub: #faece7;
+  --tpl-p-text: #b0442a;
+  --tpl-p-d: #f0997b;
+  --tpl-accent: #185fa5;
+  --tpl-r-sm: 3px;
+  --tpl-r-md: 5px;
+  --tpl-r-lg: 6px;
+  --tpl-r-xl: 8px;
+  --tpl-dark: #1c1512;
+  --tpl-dark-2: #251c18;
+  --tpl-sh-sm: 0 1px 2px rgba(28, 21, 18, 0.08), 0 1px 3px rgba(28, 21, 18, 0.05);
+  --tpl-sh-md: 0 8px 24px rgba(28, 21, 18, 0.12), 0 2px 6px rgba(28, 21, 18, 0.06);
+}
+
+/* 制造业：区块标题加一道工业感的细竖线（原型 themes.css） */
+.tpl-mfg .tpl-sec-head h2 {
+  position: relative;
+  padding-left: 16px;
+}
+
+.tpl-mfg .tpl-sec-head h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.28em;
+  bottom: 0.28em;
+  width: 3px;
+  background: var(--tpl-p);
+  border-radius: 2px;
+}
+
+/* ---------- 4. 商贸：流通曲线 · 连接与流转 ---------- */
+html.tpl-trade {
+  --tpl-p: #7c4a9e;
+  --tpl-p-h: #5f3579;
+  --tpl-p-sub: #f3eaf9;
+  --tpl-p-text: #7c4a9e;
+  --tpl-p-d: #c6acda;
+  --tpl-accent: #d4537e;
+  --tpl-r-sm: 8px;
+  --tpl-r-md: 12px;
+  --tpl-r-lg: 20px;
+  --tpl-r-xl: 28px;
+}
+
+/* ---------- 5. 数码产品：产品轮廓 · 实体与细节 ---------- */
+html.tpl-digital {
+  --tpl-p: #c2410c;
+  --tpl-p-h: #9a3412;
+  --tpl-p-sub: #fff1e7;
+  --tpl-p-text: #c2410c;
+  --tpl-p-d: #fb923c;
+  --tpl-accent: #0f6e56;
+  --tpl-r-sm: 10px;
+  --tpl-r-md: 14px;
+  --tpl-r-lg: 22px;
+  --tpl-r-xl: 32px;
+  --tpl-sh-sm: 0 2px 6px rgba(11, 15, 25, 0.06), 0 1px 2px rgba(11, 15, 25, 0.04);
+  --tpl-sh-md: 0 12px 32px rgba(11, 15, 25, 0.1), 0 3px 8px rgba(11, 15, 25, 0.04);
+}
+
+/* 数码产品：主视觉偏浅，整体更通透（原型 themes.css） */
+.tpl-digital .tpl-hero-viz {
+  background: linear-gradient(180deg, var(--tpl-p-sub), transparent);
+}
+
+.tpl-consult .tpl-hero-viz,
+.tpl-mfg .tpl-hero-viz {
+  background: transparent;
+}
+
+/* ---------- 深色模式：--tpl-* 同步重映射 ----------
+   深色模式的重映射只覆盖 --mo-*（theme-dark.css），模板层 token 另成一套：
+   不重映射时标题/正文仍是浅色模式的深色值，落在深色页底上（实测 1.04:1）。
+   选择器必须同时命中 <html> 与页面根容器 —— 前台布局在 <html> 挂类之外，
+   模板页根节点（.enterprise-home 等）也重复声明了 .tpl-site，其自带的浅色值
+   会覆盖继承自 <html> 的重映射结果。
+   品牌色 --tpl-p、深色面 --tpl-dark*、--tpl-white 两种模式通用，不重映射。 */
+html.dark.tpl-site,
+html.dark .tpl-site {
+  --tpl-bg: #141414;
+  --tpl-surface: #1d1d1d;
+  --tpl-border: #333;
+  --tpl-ink-900: #f0efec;
+  --tpl-ink-700: #d6d3d1;
+  --tpl-ink-500: #a8a29e;
+  --tpl-ink-400: #8a8580;
+  --tpl-p-sub: color-mix(in srgb, var(--tpl-p) 16%, #141414);
+  --tpl-p-text: var(--tpl-p-d);
+  --tpl-p-h: color-mix(in srgb, var(--tpl-p) 78%, #000);
+  --tpl-sh-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --tpl-sh-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  /* 模板主色（深色系）作实心按钮底时用白字；覆盖 JS 按「界面主题颜色」算出的
+     配对前景色（暗色模式下主题色可能被提亮为浅色，导致白/墨判断不适用于模板）。 */
+  --mo-on-primary: #fff !important;
+}
+
+/* ---------- 滚动入场（移植自 base.css .rv / rv.js 行为约定） ----------
+   降级红线（方案文档 §4.7）：IntersectionObserver 不可用或用户偏好减弱动效时，
+   元素直接呈现终态——绝不允许因动效失败导致内容不可见。 */
+.tpl-site .rv {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tpl-site .rv.in {
+  opacity: 1;
+  transform: none;
+}
+
+.tpl-site .d1 {
+  transition-delay: 0.08s;
+}
+
+.tpl-site .d2 {
+  transition-delay: 0.16s;
+}
+
+.tpl-site .d3 {
+  transition-delay: 0.24s;
+}
+
+.tpl-site .d4 {
+  transition-delay: 0.32s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tpl-site .rv {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  html:not(.dark).tpl-site,
+  html:not(.dark) .tpl-site {
+    --tpl-ink-500: #374151;
+    --tpl-border: #9ca3af;
+    --tpl-ink-400: #4b5563;
+  }
+
+  html.dark.tpl-site,
+  html.dark .tpl-site {
+    --tpl-ink-500: #d6d3d1;
+    --tpl-ink-400: #b8b3ae;
+    --tpl-border: #6b7280;
+  }
+}

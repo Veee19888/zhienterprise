@@ -1,0 +1,142 @@
+# Docker Compose 开发环境配置
+# 警告：在使用前，请复制 .env.example 为 .env 并设置所有必需的环境变量
+# 特别注意修改所有默认密码
+#
+# 公共基础设施（mysql / redis / prometheus / grafana、数据卷、网络）定义在
+# docker-compose.base.yml，这里通过 extends 继承，只覆盖开发环境差异。
+
+services:
+  mysql:
+    extends:
+      file: docker-compose.base.yml
+      service: mysql
+    # 开发环境直接挂载仓库里的幂等初始化脚本（可写，便于边改边试）
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+
+  redis:
+    extends:
+      file: docker-compose.base.yml
+      service: redis
+
+  prometheus:
+    extends:
+      file: docker-compose.base.yml
+      service: prometheus
+
+  grafana:
+    extends:
+      file: docker-compose.base.yml
+      service: grafana
+    depends_on:
+      - prometheus
+
+  zhi-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile-admin
+    container_name: zhi-admin
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        # 时区由镜像构建时写入（Dockerfile-admin 以 root 完成），容器以非 root 运行时不可重写
+        for i in {1..60}; do
+          curl -f mysql:3306 2>/dev/null && echo 'MySQL is ready' && break || echo 'waiting mysql...' && sleep 2
+        done
+        java -Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -jar /app/zhi-admin.jar \
+          --spring.datasource.druid.master.url=jdbc:mysql://mysql:3306/${DB_NAME:-zhienterprise}?useSSL=false\&serverTimezone=Asia/Shanghai\&allowPublicKeyRetrieval=true\&characterEncoding=utf8\&useUnicode=true \
+          --spring.datasource.druid.master.username=$DB_USERNAME \
+          --spring.datasource.druid.master.password=$DB_PASSWORD \
+          --spring.redis.host=redis \
+          --spring.redis.port=6379 \
+          --spring.redis.password=$REDIS_PASSWORD
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./uploadPath:/app/uploadPath
+      # 后端文件日志（logback 写入 /app/logs），命名卷保证容器重建后不丢
+      - admin_logs:/app/logs
+    # 控制台日志走 docker logs；限制单文件大小，避免长期运行撑满磁盘
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 512M
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      DB_HOST: mysql
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      R_TOKEN_SECRET: ${R_TOKEN_SECRET}
+      DRUID_USERNAME: ${DRUID_USERNAME:-zhi}
+      DRUID_PASSWORD: ${DRUID_PASSWORD}
+      # 验证码开关 - 从 .env 文件读取
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-false}
+    networks:
+      - zhi-network
+
+  zhi-ui:
+    build:
+      context: ./zhi-ui
+      dockerfile: Dockerfile.dev
+    image: zhi-ui:dev
+    container_name: zhi-ui
+    working_dir: /app
+    volumes:
+      - ./zhi-ui:/app:cached
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    depends_on:
+      zhi-admin:
+        condition: service_started
+    environment:
+      TZ: Asia/Shanghai
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      DOCKER: "true"
+      VITE_API_BASE_URL: http://zhi-admin:8080
+      # 监控入口地址默认由「站点设置 → 站点信息 → 监控入口」或站点访问地址自动推导，
+      # 如需固定到其它域名可在此设置（构建期变量，生产镜像需用 build args）：
+      # VITE_PROMETHEUS_URL: http://localhost:9090
+      # VITE_GRAFANA_URL: http://localhost:3001
+    networks:
+      - zhi-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  admin_logs:
+
+networks:
+  zhi-network:
+    driver: bridge

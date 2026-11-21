@@ -1,0 +1,622 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import SiteSetting from './index.vue'
+
+/**
+ * 后台站点设置页行为测试（挂载真实组件）。
+ *
+ * 取代原来的源码字符串断言：改版把「功能设置」做成卡片网格、「界面主题」加了明暗切换，
+ * 继续 grep 源码文本没有意义。这里断言可观察行为：分组渲染、开关触发落库接口、
+ * 主题/明暗切换真的作用到 <html> 与 store。
+ */
+const {
+  listSetting,
+  updateSettingValueByKey,
+  getRegistrationSwitch,
+  clearSiteCache,
+  getMailConfig,
+  saveMailConfig,
+  testMailConfig,
+  getPublishedPages,
+  ElMessage
+} = vi.hoisted(() => ({
+  listSetting: vi.fn(),
+  updateSettingValueByKey: vi.fn(),
+  getRegistrationSwitch: vi.fn(),
+  clearSiteCache: vi.fn(),
+  getMailConfig: vi.fn(),
+  saveMailConfig: vi.fn(),
+  testMailConfig: vi.fn(),
+  getPublishedPages: vi.fn(),
+  ElMessage: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }
+}))
+
+vi.mock('@/api/admin/setting', () => ({
+  listSetting: (...args: unknown[]) => listSetting(...args),
+  updateSettingValueByKey: (...args: unknown[]) => updateSettingValueByKey(...args),
+  getRegistrationSwitch: (...args: unknown[]) => getRegistrationSwitch(...args),
+  getMailConfig: (...args: unknown[]) => getMailConfig(...args),
+  saveMailConfig: (...args: unknown[]) => saveMailConfig(...args),
+  testMailConfig: (...args: unknown[]) => testMailConfig(...args)
+}))
+
+// 真实 ImageUpload 依赖 el-upload/token，这里只关心字段是否渲染
+vi.mock('@/components/ImageUpload', () => ({
+  default: {
+    props: ['modelValue'],
+    template: '<div class="image-upload-stub" :data-model="modelValue"></div>'
+  }
+}))
+
+vi.mock('@/api/site/setting', () => ({
+  clearSiteCache: (...args: unknown[]) => clearSiteCache(...args)
+}))
+
+vi.mock('@/api/site/page', () => ({
+  getPublishedPages: (...args: unknown[]) => getPublishedPages(...args)
+}))
+
+vi.mock('@/plugins/element-plus-service', () => ({
+  ElMessage
+}))
+
+// el-radio-group 用 stub 暴露 change，测试通过 $emit 选中值，驱动页面真正的处理逻辑
+const ElRadioGroupStub = {
+  name: 'ElRadioGroupStub',
+  props: ['modelValue'],
+  emits: ['change'],
+  template: '<div class="rg"><slot /></div>'
+}
+
+function mountPage() {
+  return mount(SiteSetting, {
+    global: {
+      plugins: [createPinia()],
+      stubs: {
+        'el-card': { template: '<div class="card"><slot /></div>' },
+        'el-tabs': { template: '<div><slot /></div>' },
+        // label 走属性而非插槽：渲染出来才能断言标签页分组
+        'el-tab-pane': {
+          props: ['label'],
+          template: '<div class="pane">{{ label }}<slot /></div>'
+        },
+        'el-form': { template: '<form><slot /></form>' },
+        // label 走属性而非插槽，桩要渲染出来才能按字段名断言存在/不存在
+        'el-form-item': {
+          props: ['label'],
+          template: '<div class="fi"><span class="fi-label">{{ label }}</span><slot /></div>'
+        },
+        'el-input': { props: ['modelValue'], template: '<input />' },
+        'el-input-number': { props: ['modelValue'], template: '<input type="number" />' },
+        'el-button': { template: '<button><slot /></button>' },
+        'el-icon': { template: '<i><slot /></i>' },
+        // el-alert 的标题走 title 属性而非默认插槽，stub 必须渲染出来才可断言
+        'el-alert': { props: ['title'], template: '<div class="alert">{{ title }}<slot /></div>' },
+        'el-divider': { template: '<hr />' },
+        'el-select': { template: '<div><slot /></div>' },
+        // 真实 el-option 的可见文案来自 label 属性而非插槽
+        'el-option': {
+          props: ['label', 'value'],
+          template: '<span class="opt">{{ label }}<slot /></span>'
+        },
+        'el-color-picker': { props: ['modelValue'], template: '<span class="cp" />' },
+        'el-radio-group': ElRadioGroupStub,
+        'el-radio-button': { template: '<span class="rb"><slot /></span>' },
+        'el-switch': {
+          props: ['modelValue', 'disabled'],
+          emits: ['update:modelValue', 'change'],
+          // data-feature / data-mail 通过默认 inheritAttrs 落到根元素上，供测试精确选取；
+          // data-on 暴露开关当前呈现的状态，点击时按真实 el-switch 的口径同时抛出新值与 change(新值)
+          template:
+            '<button class="sw" :disabled="disabled" :data-on="String(!!modelValue)" @click="$emit(\'update:modelValue\', !modelValue); $emit(\'change\', !modelValue)"></button>'
+        },
+        editor: { template: '<div class="editor-stub" />' },
+        RouterLink: { template: '<a><slot /></a>' }
+      }
+    }
+  })
+}
+
+describe('SiteSetting 视图（行为）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.documentElement.classList.remove('dark', 'theme-mo-blog')
+    // 返回一行，跳过空结果时的重试；其余键回落到默认值
+    listSetting.mockResolvedValue({
+      code: 200,
+      rows: [{ configKey: 'blog_name', configValue: 'X' }]
+    })
+    updateSettingValueByKey.mockResolvedValue({ code: 200 })
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: false })
+    clearSiteCache.mockResolvedValue({ code: 200 })
+    getPublishedPages.mockResolvedValue({ code: 200, data: [] })
+    getMailConfig.mockResolvedValue({
+      code: 200,
+      data: {
+        host: 'smtp.example.com',
+        port: 465,
+        username: 'a@b.com',
+        hasPassword: true,
+        ssl: true,
+        starttls: false,
+        enabled: true
+      }
+    })
+    saveMailConfig.mockResolvedValue({ code: 200, data: { hasPassword: true } })
+    testMailConfig.mockResolvedValue({ code: 200, msg: '连接成功' })
+  })
+
+  it('导出组件', () => {
+    expect(SiteSetting).toBeDefined()
+  })
+
+  it('功能设置以分组卡片渲染出各功能开关', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('评论功能')
+    expect(text).toContain('评论审核')
+    expect(text).toContain('浏览统计')
+    expect(text).toContain('友链申请入口')
+    expect(text).toContain('留言板')
+    expect(text).toContain('邮件通知')
+
+    // 每个功能开关都带 data-feature，供真实交互
+    expect(wrapper.find('[data-feature="comment_enabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-feature="guestbook_enabled"]').exists()).toBe(true)
+    // 博客式配置已移除（企业官网定位）
+    expect(wrapper.find('[data-feature="like_enabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="share_enabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="sidebar_enabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="nav_archive_enabled"]').exists()).toBe(false)
+  })
+
+  it('企业官网模式下隐藏三个不参与企业导航的裁剪开关', async () => {
+    // 默认 home_layout=business：分类/标签/归档入口由「菜单管理」决定，这三张卡改了不生效
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-feature="nav_category_enabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="nav_tag_enabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-feature="nav_archive_enabled"]').exists()).toBe(false)
+    // 同组其它开关不受影响
+    expect(wrapper.find('[data-feature="footer_enabled"]').exists()).toBe(true)
+  })
+
+  it('经典模式（home_layout≠business）下保留分类/标签两个导航裁剪开关', async () => {
+    listSetting.mockResolvedValue({
+      code: 200,
+      rows: [{ configKey: 'home_layout', configValue: 'article' }]
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-feature="nav_category_enabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-feature="nav_tag_enabled"]').exists()).toBe(true)
+    // 归档入口已随博客功能移除，不再有该开关
+    expect(wrapper.find('[data-feature="nav_archive_enabled"]').exists()).toBe(false)
+  })
+
+  it('「个人信息」页签及其字段已移除（需求：去掉站长设置）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const labels = wrapper.findAll('.fi-label').map(el => el.text())
+    for (const label of [
+      '站长',
+      '作者职位',
+      '个人简介',
+      '位置信息',
+      'GitHub地址',
+      '微博地址',
+      '个人网站'
+    ]) {
+      expect(labels, `「${label}」不应再出现在站点设置里`).not.toContain(label)
+    }
+    // 页签本身也没了
+    expect(wrapper.text()).not.toContain('个人信息')
+  })
+
+  it('联系邮箱作为联系方式字段保留', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const labels = wrapper.findAll('.fi-label').map(el => el.text())
+    expect(labels).toContain('联系邮箱')
+    expect(labels).toContain('联系电话')
+  })
+
+  it('「首页显示」下拉列出已发布的自定义页面', async () => {
+    getPublishedPages.mockResolvedValue({
+      code: 200,
+      data: [
+        { id: 1, title: '关于我们', slug: 'about' },
+        { id: 2, title: '首页', slug: 'home' }
+      ]
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('首页显示')
+    expect(text).toContain('企业官网模板首页（默认）')
+    expect(text).toContain('关于我们')
+  })
+
+  it('评论功能关闭时，评论审核开关被置灰禁用', async () => {
+    listSetting.mockResolvedValue({
+      code: 200,
+      rows: [{ configKey: 'comment_enabled', configValue: 'false' }]
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const review = wrapper.find('[data-feature="comment_review"]')
+    expect(review.exists()).toBe(true)
+    expect((review.element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('品牌图历史绝对地址（容器名/内网 IP）加载时收敛为相对路径', async () => {
+    listSetting.mockResolvedValue({
+      code: 200,
+      rows: [
+        {
+          configKey: 'site_logo',
+          configValue: 'http://zhi-admin:8080/profile/upload/2026/10/17/logo_A002.png'
+        },
+        {
+          configKey: 'site_banner',
+          configValue: 'http://127.0.0.1:8080/profile/upload/2026/10/17/banner.png'
+        }
+      ]
+    })
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: false })
+    getMailConfig.mockResolvedValue({ code: 200, data: {} })
+    getPublishedPages.mockResolvedValue({ code: 200, data: [] })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const uploadModels = wrapper
+      .findAll('.image-upload-stub')
+      .map(node => node.attributes('data-model'))
+    expect(uploadModels).toContain('/profile/upload/2026/10/17/logo_A002.png')
+    expect(uploadModels).toContain('/profile/upload/2026/10/17/banner.png')
+  })
+
+  it('站点信息 tab 提供 Logo 与 Banner 上传，并绑定到站点设置键', async () => {
+    listSetting.mockResolvedValue({ code: 200, rows: [] })
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: false })
+    getMailConfig.mockResolvedValue({ code: 200, data: {} })
+    getPublishedPages.mockResolvedValue({ code: 200, data: [] })
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const labels = wrapper.findAll('.fi-label').map(n => n.text())
+    expect(labels).toContain('站点 Logo')
+    expect(labels).toContain('首页 Banner')
+
+    // 两个字段都渲染了上传控件（而非纯文本输入）
+    expect(wrapper.findAll('.image-upload-stub')).toHaveLength(2)
+  })
+
+  it('切换功能开关会把开关的新值落库', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    // search_enabled 默认 true，点击 → 关掉并写入 'false'
+    // （真实 el-switch 先更新 v-model 再抛 change，stub 按此口径发出新值）
+    await wrapper.find('[data-feature="search_enabled"]').trigger('click')
+    await flushPromises()
+
+    expect(updateSettingValueByKey).toHaveBeenCalledWith('search_enabled', 'false')
+    expect(ElMessage.success).toHaveBeenCalled()
+  })
+
+  it('选择「深色」外观模式会给 <html> 加上 dark 类', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    // 主题页第一个 el-radio-group 是外观模式
+    const groups = wrapper.findAllComponents(ElRadioGroupStub)
+    groups[0].vm.$emit('change', 'dark')
+    await flushPromises()
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+
+  it('挂载时读取邮件服务配置', async () => {
+    mountPage()
+    await flushPromises()
+    expect(getMailConfig).toHaveBeenCalled()
+  })
+
+  it('保存邮件配置走专用接口且空密码不提交', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const saveBtn = wrapper.findAll('button').find(b => b.text().includes('保存并生效'))
+    expect(saveBtn).toBeTruthy()
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    expect(saveMailConfig).toHaveBeenCalledTimes(1)
+    const payload = saveMailConfig.mock.calls[0][0] as Record<string, unknown>
+    // fetchMailConfig 未回显密码，保存时空密码不应作为 password 提交（保留原密码由后端处理）
+    expect(payload.password === undefined || payload.password === '').toBe(true)
+    expect(payload.host).toBe('smtp.example.com')
+    expect(ElMessage.success).toHaveBeenCalled()
+  })
+
+  it('测试连接会把当前表单发给后端', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const testBtn = wrapper.findAll('button').find(b => b.text().includes('测试连接'))
+    expect(testBtn).toBeTruthy()
+    await testBtn!.trigger('click')
+    await flushPromises()
+
+    expect(testMailConfig).toHaveBeenCalledTimes(1)
+    const payload = testMailConfig.mock.calls[0][0] as Record<string, unknown>
+    expect(payload.host).toBe('smtp.example.com')
+  })
+
+  it('打开 STARTTLS 会自动关闭 SSL，提交不会出现两者同开', async () => {
+    // 回填：ssl=true / starttls=false
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.find('[data-mail="starttls"]').trigger('click')
+    await flushPromises()
+
+    const saveBtn = wrapper.findAll('button').find(b => b.text().includes('保存并生效'))
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = saveMailConfig.mock.calls[0][0] as Record<string, unknown>
+    expect(payload.starttls).toBe(true)
+    expect(payload.ssl).toBe(false)
+  })
+
+  it('后端回显两者同开时，只按 SSL 呈现', async () => {
+    // 环境变量基线可能让后端返回冲突值，表单不能照着画成两个都开
+    getMailConfig.mockResolvedValue({
+      code: 200,
+      data: { host: 'smtp.example.com', port: 465, username: 'a@b.com', ssl: true, starttls: true }
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const saveBtn = wrapper.findAll('button').find(b => b.text().includes('保存并生效'))
+    await saveBtn!.trigger('click')
+    await flushPromises()
+
+    const payload = saveMailConfig.mock.calls[0][0] as Record<string, unknown>
+    expect(payload.ssl).toBe(true)
+    expect(payload.starttls).toBe(false)
+  })
+
+  it('dev-print-code 打开时，邮件服务页显式警告不会真实发信', async () => {
+    getMailConfig.mockResolvedValue({
+      code: 200,
+      data: {
+        host: 'smtp.126.com',
+        port: 465,
+        username: 'a@b.com',
+        ssl: true,
+        starttls: false,
+        devPrintCode: true
+      }
+    })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const warn = wrapper.find('[data-mail="dev-print"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('不会真实发信')
+  })
+
+  it('dev-print-code 关闭时不显示该警告', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-mail="dev-print"]').exists()).toBe(false)
+  })
+
+  it('用户注册开关显示注册入口实际读到的值，而不是本地镜像', async () => {
+    // blog_setting 的镜像说"开"，sys_config（两个注册入口的读取源）说"关"：卡片必须显示关，
+    // 否则用户会看到"已开启却仍提示当前系统没有开启注册功能"
+    listSetting.mockResolvedValue({
+      code: 200,
+      rows: [{ configKey: 'sys.account.registerUser', configValue: 'true' }]
+    })
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: false })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const sw = wrapper.find('[data-feature="sys.account.registerUser"]')
+    expect(sw.exists()).toBe(true)
+    expect(sw.attributes('data-on')).toBe('false')
+  })
+
+  it('注册入口读到的值为开启时，用户注册开关显示为开', async () => {
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: true })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('[data-feature="sys.account.registerUser"]').attributes('data-on')).toBe(
+      'true'
+    )
+  })
+
+  it('切换用户注册会把新值落库（后端据此同步 sys_config 并清缓存）', async () => {
+    getRegistrationSwitch.mockResolvedValue({ code: 200, data: true })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.find('[data-feature="sys.account.registerUser"]').trigger('click')
+    await flushPromises()
+
+    expect(updateSettingValueByKey).toHaveBeenCalledWith('sys.account.registerUser', 'false')
+    expect(ElMessage.success).toHaveBeenCalled()
+  })
+
+  it('官网内容用标签页分组维护（首页内容 / 荣誉与历程 / 联系与问答 / 页面文案）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const label of ['首页内容', '荣誉与历程', '联系与问答', '页面文案']) {
+      expect(text).toContain(label)
+    }
+  })
+
+  it('官网内容提示首页 Hero 文案的维护入口，避免与模板硬编码不一致', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('页面管理 → 首页')
+    expect(text).toContain('年限数字只写在「信任指标」里')
+  })
+
+  it('官网内容按分区卡片渲染，每个分区带标题、说明与字段标签', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const title of [
+      '首页 · 信任指标条',
+      '首页 · 数据成果',
+      '首页 · 解决方案精选',
+      '荣誉资质墙',
+      '发展历程时间轴',
+      '联系我们 · 分渠道咨询',
+      '联系我们 · 常见问题',
+      '模板页头文案'
+    ]) {
+      expect(text).toContain(title)
+    }
+    // 字段不再只靠 placeholder，改为显式标签
+    expect(text).toContain('数值')
+    expect(text).toContain('说明')
+    expect(text).toContain('方案名称')
+    expect(text).toContain('颁发方')
+    expect(text).toContain('阶段主题')
+  })
+
+  it('内容行支持上移/下移，数组顺序即前台展示顺序', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      settingsMap: Record<string, any>
+      moveContentRow: (key: string, index: number, delta: number) => void
+    }
+    const before = vm.settingsMap.site_metrics.map((m: any) => m.label)
+    vm.moveContentRow('site_metrics', 0, 1)
+    const after = vm.settingsMap.site_metrics.map((m: any) => m.label)
+
+    expect(after[0]).toBe(before[1])
+    expect(after[1]).toBe(before[0])
+    expect(after).toHaveLength(before.length)
+  })
+
+  it('分区「恢复默认」把当前分区还原为内置数据', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      settingsMap: Record<string, any>
+      resetContentSection: (key: string) => void
+    }
+    vm.settingsMap.site_metrics = [{ value: '999', label: '被改坏的内容' }]
+    vm.resetContentSection('site_metrics')
+
+    expect(vm.settingsMap.site_metrics.length).toBeGreaterThan(1)
+    expect(vm.settingsMap.site_metrics[0].label).not.toBe('被改坏的内容')
+  })
+
+  it('新增/删除内容行会同步分区计数', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      settingsMap: Record<string, any>
+      addContentRow: (key: string, tpl: Record<string, any>) => void
+      removeContentRow: (key: string, index: number) => void
+    }
+    const before = vm.settingsMap.site_channels.length as number
+    vm.addContentRow('site_channels', { name: '', desc: '' })
+    await flushPromises()
+    expect(vm.settingsMap.site_channels).toHaveLength(before + 1)
+    expect(wrapper.text()).toContain(`${before + 1} 项`)
+
+    vm.removeContentRow('site_channels', 0)
+    await flushPromises()
+    expect(vm.settingsMap.site_channels).toHaveLength(before)
+    expect(wrapper.text()).toContain(`${before} 项`)
+  })
+
+  it('页面文案「恢复默认」清空所有分页文案（前台回退内置）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      settingsMap: Record<string, any>
+      resetPageCopy: () => void
+    }
+    vm.settingsMap.site_page_copy.contact.title = '被改过的标题'
+    vm.resetPageCopy()
+
+    expect(vm.settingsMap.site_page_copy.contact).toEqual({
+      eyebrow: '',
+      title: '',
+      subtitle: ''
+    })
+  })
+
+  it('官网内容页签渲染模板页头文案编辑器（五个模板页面）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const text = wrapper.text()
+    for (const label of ['核心业务页', '联系页', '关于页', '历程页', '荣誉页']) {
+      expect(text).toContain(label)
+    }
+  })
+
+  it('模板页头文案编辑后保存按 JSON 落库，未填写字段保持未设置（前台回退）', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      settingsMap: Record<string, any>
+      saveAllSettings: () => Promise<void>
+    }
+    vm.settingsMap.site_page_copy.contact.title = '快速联系'
+    await vm.saveAllSettings()
+    await flushPromises()
+
+    const call = updateSettingValueByKey.mock.calls.find(
+      (c: unknown[]) => c[0] === 'site_page_copy'
+    )
+    expect(call).toBeTruthy()
+    const stored = JSON.parse(String(call![1]))
+    expect(stored.contact.title).toBe('快速联系')
+    // 未填写的页面与字段保持空串：前台据此回退站点设置与内置文案
+    expect(stored.business).toEqual({ eyebrow: '', title: '', subtitle: '' })
+    expect(Object.keys(stored).sort()).toEqual([
+      'about',
+      'business',
+      'contact',
+      'history',
+      'honors'
+    ])
+  })
+})

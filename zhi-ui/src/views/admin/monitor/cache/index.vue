@@ -1,0 +1,272 @@
+<template>
+  <div class="app-container">
+    <el-row :gutter="10">
+      <el-col :span="24" class="card-box">
+        <el-card>
+          <template #header>
+            <Monitor style="width: 1em; height: 1em; vertical-align: middle" />
+            <span style="vertical-align: middle">基本信息</span>
+          </template>
+          <div class="el-table el-table--enable-row-hover el-table--medium">
+            <table cellspacing="0" style="width: 100%">
+              <tbody>
+                <tr>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">Redis版本</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.redis_version }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">运行模式</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.redis_mode === 'standalone' ? '单机' : '集群' }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">端口</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.tcp_port }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">客户端数</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.connected_clients }}
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">运行时间(天)</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.uptime_in_days }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">使用内存</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.used_memory_human }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">使用CPU</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ parseFloat(cache.info.used_cpu_user_children).toFixed(2) }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">内存配置</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.maxmemory_human }}
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">AOF是否开启</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.aof_enabled === '0' ? '否' : '是' }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">RDB是否成功</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.rdb_last_bgsave_status }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">Key数量</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.dbSize" class="cell">
+                      {{ cache.dbSize }}
+                    </div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div class="cell">网络入口/出口</div>
+                  </td>
+                  <td class="el-table__cell is-leaf">
+                    <div v-if="cache.info" class="cell">
+                      {{ cache.info.instantaneous_input_kbps }}kps/{{
+                        cache.info.instantaneous_output_kbps
+                      }}kps
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </el-card>
+      </el-col>
+
+      <el-col :span="12" class="card-box">
+        <el-card>
+          <template #header>
+            <PieChart style="width: 1em; height: 1em; vertical-align: middle" />
+            <span style="vertical-align: middle">命令统计</span>
+          </template>
+          <div class="el-table el-table--enable-row-hover el-table--medium">
+            <div ref="commandstats" style="height: 420px"></div>
+          </div>
+        </el-card>
+      </el-col>
+
+      <el-col :span="12" class="card-box">
+        <el-card>
+          <template #header>
+            <Odometer style="width: 1em; height: 1em; vertical-align: middle" />
+            <span style="vertical-align: middle">内存信息</span>
+          </template>
+          <div class="el-table el-table--enable-row-hover el-table--medium">
+            <div ref="usedmemory" style="height: 420px"></div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<script setup lang="ts" name="Cache">
+import { getCache } from '@/api/monitor/cache'
+import { loadEcharts, getChartThemeColors } from '@/utils/echarts'
+import { useSettingsStore } from '@/stores/settings'
+import { logger } from '@/utils/logger'
+
+interface CacheMonitorData {
+  info: Record<string, string>
+  dbSize?: number
+  commandStats?: Array<Record<string, any>>
+}
+
+const cache = ref<CacheMonitorData>({ info: {} })
+const commandstats = ref<HTMLElement | null>(null)
+const usedmemory = ref<HTMLElement | null>(null)
+const { proxy } = getCurrentInstance()!
+const settingsStore = useSettingsStore()
+const commandstatsChart = ref<any>(null)
+const usedmemoryChart = ref<any>(null)
+let resizeCharts: Array<{ resize: () => void }> = []
+
+const resizeCacheCharts = () => {
+  resizeCharts.forEach(chart => chart.resize())
+}
+
+async function getList() {
+  proxy.$modal.loading('正在加载缓存监控数据，请稍候！')
+  try {
+    const response = await getCache()
+    cache.value = response.data
+
+    await renderCharts()
+  } catch (error) {
+    logger.error('获取缓存监控数据失败:', error)
+  } finally {
+    proxy.$modal.closeLoading()
+  }
+}
+
+function buildCommandStatsOption() {
+  const colors = getChartThemeColors()
+  return {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{a} <br/>{b} : {c} ({d}%)',
+      textStyle: { color: colors.textColor }
+    },
+    series: [
+      {
+        name: '命令',
+        type: 'pie',
+        roseType: 'radius',
+        radius: [15, 95],
+        center: ['50%', '38%'],
+        data: cache.value.commandStats || [],
+        label: { color: colors.textColor },
+        animationEasing: 'cubicInOut',
+        animationDuration: 1000
+      }
+    ]
+  }
+}
+
+function buildUsedMemoryOption() {
+  const colors = getChartThemeColors()
+  return {
+    tooltip: {
+      formatter: '{b} <br/>{a} : ' + cache.value.info.used_memory_human,
+      textStyle: { color: colors.textColor }
+    },
+    series: [
+      {
+        name: '峰值',
+        type: 'gauge',
+        min: 0,
+        max: 1000,
+        title: { color: colors.secondaryColor },
+        detail: {
+          formatter: cache.value.info.used_memory_human,
+          color: colors.textColor
+        },
+        axisLabel: { color: colors.secondaryColor },
+        data: [
+          {
+            value: parseFloat(cache.value.info.used_memory_human || '0'),
+            name: '内存消耗'
+          }
+        ]
+      }
+    ]
+  }
+}
+
+async function renderCharts() {
+  if (!commandstats.value || !usedmemory.value) return
+  const echarts = await loadEcharts()
+  if (!commandstatsChart.value) {
+    commandstatsChart.value = echarts.init(commandstats.value, 'macarons')
+  }
+  commandstatsChart.value.setOption(buildCommandStatsOption())
+  if (!usedmemoryChart.value) {
+    usedmemoryChart.value = echarts.init(usedmemory.value, 'macarons')
+  }
+  usedmemoryChart.value.setOption(buildUsedMemoryOption())
+  resizeCharts = [commandstatsChart.value, usedmemoryChart.value]
+  window.removeEventListener('resize', resizeCacheCharts)
+  window.addEventListener('resize', resizeCacheCharts)
+}
+
+getList()
+
+// 深色模式切换时用最新主题色重绘图表
+watch(
+  () => settingsStore.isDark,
+  () => {
+    renderCharts()
+  }
+)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCacheCharts)
+})
+</script>

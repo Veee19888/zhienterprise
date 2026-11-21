@@ -1,0 +1,333 @@
+<template>
+  <footer v-if="isFooterEnabled" class="ent-footer">
+    <div class="eh-wrap">
+      <div class="fgrid">
+        <div class="fbrand">
+          <div class="flogo">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true">
+              <rect
+                x="1.5"
+                y="1.5"
+                width="23"
+                height="23"
+                rx="6"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <path
+                d="M7 13h12M13 7v12"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              />
+            </svg>
+            {{ siteSettings.blog_name || '知企建站系统' }}
+          </div>
+          <p class="fdesc">{{ siteSettings.blog_desc || '' }}</p>
+          <p v-if="isBeianEnabled && siteSettings.blog_beian" class="fbeian">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+              {{ siteSettings.blog_beian }}
+            </a>
+          </p>
+        </div>
+
+        <div class="fcol">
+          <h4>快速导航</h4>
+          <template v-for="item in footerNavItems" :key="`${item.linkValue}-${item.label}`">
+            <a v-if="item.linkType === 'url'" :href="item.linkValue" target="_blank" rel="noopener">
+              {{ item.label }}
+            </a>
+            <router-link v-else-if="isBusinessItem(item)" :to="item.linkValue || '/'">
+              {{ businessLabel }}
+            </router-link>
+            <router-link v-else :to="item.linkValue || '/'">{{ item.label }}</router-link>
+          </template>
+        </div>
+
+        <div class="fcol">
+          <h4>合作</h4>
+          <router-link to="/contact">咨询合作</router-link>
+          <router-link v-if="isGuestbookEnabled" to="/guestbook">留言板</router-link>
+          <a :href="rssUrl" target="_blank" rel="noopener noreferrer">RSS 订阅</a>
+        </div>
+
+        <div class="fcol">
+          <h4>联系我们</h4>
+          <span v-if="siteSettings.contact_address">{{ siteSettings.contact_address }}</span>
+          <a
+            v-if="siteSettings.contact_phone"
+            :href="`tel:${siteSettings.contact_phone.replace(/\s/g, '')}`"
+          >
+            {{ siteSettings.contact_phone }}
+          </a>
+          <span v-if="!hasContactInfo">通过「联系我们」页面获取联系方式</span>
+        </div>
+      </div>
+
+      <div class="fbot">
+        <span v-if="isCopyrightEnabled">
+          © {{ currentYear }} {{ siteSettings.blog_name || '知企建站系统' }} 保留所有权利
+        </span>
+        <span class="fbot-links">
+          <router-link to="/agreement">法律声明</router-link>
+          <router-link to="/privacy">隐私政策</router-link>
+          <label class="motion-toggle">
+            <input
+              type="checkbox"
+              :checked="motionOff"
+              @change="toggleMotionOff(($event.target as HTMLInputElement).checked)"
+            />
+            减弱动效
+          </label>
+        </span>
+      </div>
+    </div>
+
+    <!-- 返回顶部：滚动超过 600px 滑入（方案文档 §1.2） -->
+    <transition name="totop">
+      <button v-if="showToTop" type="button" class="to-top" aria-label="返回顶部" @click="toTop">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M8 13V3M4 7l4-4 4 4"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+    </transition>
+  </footer>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useSiteSettingsStore } from '@/stores/siteSettings'
+import { getSiteNav, type SiteNavItem } from '@/api/site/nav'
+import { DEFAULT_FOOTER_NAV } from '@/config/siteNav'
+import { getApiBaseUrl } from '@/utils/index'
+import {
+  applyMotionOff,
+  getMotionOffStored,
+  MOTION_OFF_STORAGE_KEY
+} from '@/utils/motionPreference'
+
+const siteSettingsStore = useSiteSettingsStore()
+const siteSettings = computed(() => siteSettingsStore.siteSettings)
+const businessLabel = computed(
+  () => String(siteSettings.value.business_label || '').trim() || '核心业务'
+)
+const isFooterEnabled = computed(() => siteSettingsStore.isFeatureEnabled('footer_enabled'))
+const isCopyrightEnabled = computed(() => siteSettingsStore.isFeatureEnabled('copyright_enabled'))
+const isGuestbookEnabled = computed(() => siteSettingsStore.isFeatureEnabled('guestbook_enabled'))
+const isBeianEnabled = computed(() => siteSettingsStore.isFeatureEnabled('beian_enabled'))
+const currentYear = computed(() => new Date().getFullYear())
+const hasContactInfo = computed(
+  () => Boolean(siteSettings.value.contact_address) || Boolean(siteSettings.value.contact_phone)
+)
+
+const rssUrl = computed(() => {
+  const base = getApiBaseUrl().replace(/\/$/, '')
+  return `${base}/api/rss`
+})
+
+/* ---------- 快速导航：site_nav_item 表驱动（后台「菜单管理」维护） ---------- */
+const footerNavItems = ref<SiteNavItem[]>(DEFAULT_FOOTER_NAV)
+
+/** 与头部导航/后台菜单管理同口径：trim 后精确匹配核心业务入口 */
+const isBusinessItem = (item: SiteNavItem) => (item.linkValue || '').trim() === '/business'
+
+/* ---------- 减弱动效开关（§4.7 用户手动开关，优先级高于系统设置） ---------- */
+const motionOff = ref(getMotionOffStored())
+
+function toggleMotionOff(on: boolean) {
+  motionOff.value = on
+  applyMotionOff(on)
+}
+
+onMounted(async () => {
+  try {
+    const response = await getSiteNav('footer')
+    const tree = (response as { data?: SiteNavItem[] })?.data
+    if (Array.isArray(tree) && tree.length > 0) {
+      footerNavItems.value = tree
+    }
+  } catch {
+    // 接口异常：保留内置默认
+  }
+})
+
+const formatUrl = (url?: string) => {
+  if (!url) return '#'
+  return /^https?:\/\//.test(url) ? url : `https://${url}`
+}
+
+/* ---------- 返回顶部 ---------- */
+const showToTop = ref(false)
+const onScroll = () => {
+  showToTop.value = window.scrollY > 600
+}
+const toTop = () => window.scrollTo({ top: 0, behavior: 'smooth' })
+
+onMounted(() => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+  // 启动时同步历史手动偏好到 <html>（动效层据此跳过动画）
+  applyMotionOff(motionOff.value)
+})
+onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
+</script>
+
+<style scoped>
+.ent-footer {
+  background: var(--tpl-dark);
+  color: var(--tpl-dark-dim);
+  padding-bottom: var(--mo-sp-8);
+  margin-top: var(--mo-sp-12);
+}
+
+.eh-wrap {
+  max-width: var(--tpl-grid);
+  margin: 0 auto;
+  padding: 0 var(--mo-sp-7);
+}
+
+.fgrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.4fr;
+  gap: var(--mo-sp-11);
+  padding: var(--mo-sp-11) 0;
+}
+
+.flogo {
+  display: flex;
+  align-items: center;
+  gap: var(--mo-sp-2);
+  color: var(--tpl-white);
+  font-weight: 600;
+  font-size: var(--mo-fs-md);
+  margin-bottom: var(--mo-sp-4);
+}
+
+.fdesc {
+  font-size: var(--mo-fs-sm);
+  max-width: 280px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.fbeian {
+  font-size: var(--mo-fs-sm);
+  margin: var(--mo-sp-4) 0 0;
+  opacity: 0.6;
+}
+
+.fbeian a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.fcol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mo-sp-3);
+}
+
+.fcol h4 {
+  color: var(--tpl-white);
+  font-size: var(--mo-fs-sm);
+  font-weight: 500;
+  margin: 0 0 var(--mo-sp-2);
+}
+
+.fcol a,
+.fcol span {
+  font-size: var(--mo-fs-sm);
+  color: var(--tpl-dark-dim);
+  text-decoration: none;
+}
+
+.fcol a:hover {
+  color: var(--tpl-white);
+}
+
+.fbot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mo-sp-4);
+  padding-top: var(--mo-sp-6);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: var(--mo-fs-sm);
+}
+
+.fbot-links {
+  display: flex;
+  gap: var(--mo-sp-6);
+}
+
+.fbot a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.fbot a:hover {
+  color: var(--tpl-white);
+}
+
+/* 返回顶部（固定底部元素需预留 iOS 安全区，方案文档 §5.3） */
+.to-top {
+  position: fixed;
+  right: var(--mo-sp-6);
+  bottom: calc(var(--mo-sp-6) + env(safe-area-inset-bottom, 0px));
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--tpl-border);
+  border-radius: 999px;
+  background: var(--tpl-bg);
+  color: var(--tpl-ink-700);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--tpl-sh-md);
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s;
+}
+
+.to-top:hover {
+  transform: translateY(-3px);
+  color: var(--tpl-p-text);
+}
+
+.totop-enter-active,
+.totop-leave-active {
+  transition:
+    opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.totop-enter-from,
+.totop-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+@media (max-width: 991px) {
+  .eh-wrap {
+    padding: 0 var(--mo-sp-5);
+  }
+
+  .fgrid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--mo-sp-7);
+  }
+}
+
+@media (max-width: 639px) {
+  .fgrid {
+    grid-template-columns: 1fr;
+    gap: var(--mo-sp-6);
+  }
+}
+</style>

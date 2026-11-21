@@ -1,0 +1,157 @@
+# 知企建站系统（ZhiEnterprise）发布流水线：打 v* 开头的 tag 时触发（如 v1.1.0）
+# 构建测试 + 上传制品 + 发布 Gitee 发行版；部署阶段为骨架，配置好主机组后取消注释即可
+version: '1.0'
+name: release-pipeline
+displayName: 版本发布（tag 触发）
+triggers:
+  trigger: auto
+  push:
+    tags:
+      include:
+        - v*
+      # 排除 release@gitee 插件自动创建的 v1.1.0 tag，避免流水线被自身触发死循环
+      exclude:
+        - v1.1.0.*
+stages:
+  - name: backend
+    displayName: 后端编译与测试
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@maven
+        name: backend_maven
+        displayName: Maven 编译与测试
+        jdkVersion: 17
+        mavenVersion: 3.6.3
+        commands:
+          # Gitee Go 镜像缺 libfreetype.so.6，水印测试需要；优先 yum，Ubuntu 镜像用 apt-get，都不行则忽略
+          - (command -v yum >/dev/null 2>&1 && yum install -y freetype) || (command -v apt-get >/dev/null 2>&1 && timeout 90 apt-get update -qq && timeout 120 apt-get install -y -qq freetype) || true
+          # 校验 tag 与 pom 版本一致。本流水线**仅由 v* tag 触发**，所以"检不出 tag"不应被当作正常情况
+          # 跳过 —— 那样会让 tag 与 pom 不一致的发布悄悄通过。优先用 Gitee 注入的环境变量，
+          # 再退回 git tag；两者都拿不到就直接失败（与 GitHub release.yml 的强度对齐）。
+          - |
+            TAG_VERSION="${GITEE_TAG_NAME:-${GITEE_REF_NAME:-}}"
+            TAG_VERSION="${TAG_VERSION#v}"
+            if [ -z "$TAG_VERSION" ]; then
+              TAG_VERSION=$(git tag --points-at HEAD 2>/dev/null | head -1 | sed 's/^v//')
+            fi
+            if [ -z "$TAG_VERSION" ]; then
+              echo "::error::未能确定当前 tag，无法校验版本一致性（流水线应由 v* tag 触发）"; exit 1
+            fi
+            POM_VERSION=$(grep -m1 '<version>' pom.xml | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/')
+            echo "tag=$TAG_VERSION pom=$POM_VERSION"
+            [ "$TAG_VERSION" = "$POM_VERSION" ] || { echo "tag 与 pom 版本不一致"; exit 1; }
+          - mvn -B clean verify
+          # 复制 jar 到仓库根目录，release@gitee 插件按该相对路径下载/挂载附件
+          - cp zhi-admin/target/zhi-admin.jar zhi-admin.jar
+          # 与 GitHub 保持一致：部署配套打包为 zip（sql / nginx / .env 示例 / 部署指南 / compose 编排）
+          - (command -v zip >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq zip; }) || true
+          # 运维脚本先做语法检查，坏脚本不允许进发布包
+          - for f in scripts/*.sh; do bash -n "$f" || exit 1; done
+          # 整个 sql 目录（00 + 全部 99_*.sql 补丁 + README）与 scripts 一起发布
+          - mkdir -p deploy-assets && cp -r sql deploy-assets/sql && cp -r scripts deploy-assets/scripts && cp zhi-ui/nginx.conf zhi-ui/nginx-https.conf .env.example docs/DEPLOYMENT_RELEASE.md docs/BACKUP_RESTORE.md docker-compose.release.yml docker-compose.base.yml deploy-assets/ && cp -r prometheus grafana deploy-assets/ && cd deploy-assets && zip -qr ../deploy-assets.zip . && cd ..
+        artifacts:
+          - name: BACKEND_JAR
+            path:
+              - zhi-admin.jar
+          - name: DEPLOY_ASSETS
+            path:
+              - deploy-assets.zip
+      - step: publish@general_artifacts
+        name: publish_backend
+        displayName: 上传后端制品
+        dependArtifact: BACKEND_JAR
+        artifactName: zhienterprise-backend
+        dependsOn: backend_maven
+  - name: frontend
+    displayName: 前端检查与构建
+    strategy: naturally
+    trigger: auto
+    steps:
+      - step: build@nodejs
+        name: frontend_node
+        displayName: Node 检查与构建
+        nodeVersion: '22'
+        commands:
+          # Gitee Go Node 插件可能不提供 npm（nodeVersion 不受支持时），自带 Node 22.14.0 兜底
+          - wget -qO- https://cdn.npmmirror.com/binaries/node/v22.14.0/node-v22.14.0-linux-x64.tar.gz | tar -xz -C /opt || true
+          - export PATH=/opt/node-v22.14.0-linux-x64/bin:$PATH
+          - node -v && npm -v
+          - cd zhi-ui && npm config set registry https://registry.npmmirror.com && npm ci && npm run lint:check && npm run format:check && npm run typecheck && npm run test:coverage && npm run build:prod && cd ..
+          # 打包前端产物，release@gitee 按相对路径下载/挂载附件
+          - (command -v zip >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq zip; }) || true
+          # 从 dist 内部打包，保证 index.html 在压缩包根目录（与 GitHub 一致）
+          - cd zhi-ui/dist && zip -qr ../../frontend-dist.zip . && cd ../..
+        artifacts:
+          - name: FRONTEND_DIST
+            path:
+              - zhi-ui/dist
+          - name: FRONTEND_DIST_PACKAGE
+            path:
+              - frontend-dist.zip
+      - step: publish@general_artifacts
+        name: publish_frontend
+        displayName: 上传前端制品
+        dependArtifact: FRONTEND_DIST
+        artifactName: zhienterprise-frontend
+        dependsOn: frontend_node
+  - name: publish
+    displayName: 发布 Gitee 发行版
+    strategy: naturally
+    trigger: auto
+    steps:
+      # Gitee Go Release 插件：自动创建仓库「发行版」，复用触发流水线的 v1.1.0 tag
+      - step: release@gitee
+        name: release_gitee
+        displayName: Gitee Release
+        releaseName: 知企建站系统 v1.1.0
+        description: 知企建站系统 v1.1.0 发布构建（Gitee Go 流水线自动生成）。
+        tagName: v1.1.0
+        upstreamArtifact:
+          - BACKEND_JAR
+          - FRONTEND_DIST_PACKAGE
+          - DEPLOY_ASSETS
+        assertFiles:
+          - zhi-admin.jar
+          - frontend-dist.zip
+          - deploy-assets.zip
+        prerelease: false
+        allowUpdate: true
+  # ------------------------------------------------------------------
+  # 部署骨架：开通后请在 Gitee Go 控制台创建主机组并安装 Agent，
+  # 将下方 hostGroupID 替换为真实值，并取消整段注释。
+  # 服务器密钥、R_TOKEN_SECRET、DB_PASSWORD、REDIS_PASSWORD、DRUID_PASSWORD
+  # 等敏感信息请配置在流水线参数/凭据中，不要提交到仓库。
+  # ------------------------------------------------------------------
+  # - name: deploy
+  #   displayName: 发布部署
+  #   strategy: naturally
+  #   trigger: auto
+  #   steps:
+  #     - step: publish@general_artifacts
+  #       name: publish_backend
+  #       displayName: 上传后端制品
+  #       dependArtifact: BACKEND_JAR
+  #       artifactName: zhienterprise-backend
+  #       dependsOn: backend_maven
+  #     - step: publish@general_artifacts
+  #       name: publish_frontend
+  #       displayName: 上传前端制品
+  #       dependArtifact: FRONTEND_DIST
+  #       artifactName: zhienterprise-frontend
+  #       dependsOn: frontend_node
+  #     - step: deploy@agent
+  #       name: deploy_agent
+  #       displayName: 主机部署
+  #       hostGroupID: your-host-group-id
+  #       deployArtifact:
+  #         - source: build
+  #           name: backend
+  #           target: ~/gitee_go/deploy/backend
+  #           dependArtifact: BACKEND_JAR
+  #         - source: build
+  #           name: frontend
+  #           target: ~/gitee_go/deploy/frontend
+  #           dependArtifact: FRONTEND_DIST
+  #       script:
+  #         - cd ~/gitee_go/deploy && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d

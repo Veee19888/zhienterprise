@@ -1,0 +1,1856 @@
+/**
+ * 知企建站系统主题系统 - Mo Site 主题
+ *
+ * 变量命名规范：
+ * - --mo-p*: 主题色（Primary, Purple/Indigo 色系）
+ * - --mo-n*: 中性色（Neutral, 灰棕色系）
+ * - --mo-a*: 强调色（Accent, Pink 色系）
+ * - --mo-r*: 圆角（Radius）
+ * - --mo-shadow*: 阴影
+ * - --mo-font-*: 字体
+ *
+ * 深色模式映射策略：
+ * 1. 默认主题：映射 --el-* 变量到 Tech Blue 深蓝色系
+ * 2. Mo-Blog 主题：映射 --el-* 变量到棕色深色系
+ * 3. 组件级覆盖：仅在必要时使用（优先级更高）
+ *
+ * 主题切换流程：
+ * 1. appTheme 设置在 useSettingsStore 中
+ * 2. themeMode 控制 light/dark/system 模式
+ * 3. html.dark 和 .theme-mo-blog class 控制激活的主题
+ */
+
+:root {
+  /* 主色色阶由「界面主题 → 主题颜色」派生（handleThemeStyle 写入 --theme-primary）。
+     组件只要用 --mo-p* 就会跟随主题色；企业官网模板作用域会把它覆盖成模板主色
+     （见 themes/enterprise.scss）。不要在组件里再写死 p 色阶字面量。
+     档位按原靛蓝色板的明度比例用 color-mix 还原：50–500 向白混合，700–900 向黑混合。 */
+  --theme-primary: #4f46e5;
+  --mo-p50: color-mix(in srgb, var(--theme-primary) 10%, #fff);
+  --mo-p100: color-mix(in srgb, var(--theme-primary) 17%, #fff);
+  --mo-p200: color-mix(in srgb, var(--theme-primary) 30%, #fff);
+  --mo-p300: color-mix(in srgb, var(--theme-primary) 47%, #fff);
+  --mo-p400: color-mix(in srgb, var(--theme-primary) 68%, #fff);
+  --mo-p500: color-mix(in srgb, var(--theme-primary) 87%, #fff);
+  --mo-p600: var(--theme-primary);
+  --mo-p700: color-mix(in srgb, var(--theme-primary) 85%, #000);
+  --mo-p800: color-mix(in srgb, var(--theme-primary) 70%, #000);
+  --mo-p900: color-mix(in srgb, var(--theme-primary) 62%, #000);
+  --mo-n0: #ffffff;
+  --mo-n50: #fafaf9;
+  --mo-n100: #f5f5f4;
+  --mo-n200: #e7e5e4;
+  --mo-n300: #d6d3d1;
+  --mo-n400: #a8a29e;
+  --mo-n500: #78716c;
+  --mo-n600: #57534e;
+  --mo-n700: #44403c;
+  --mo-n800: #292524;
+  --mo-n900: #1c1917;
+  --mo-a50: #fdf2f8;
+  --mo-a100: #fce7f3;
+  --mo-a200: #fbcfe8;
+  --mo-a400: #f472b6;
+  --mo-a500: #ec4899;
+  --mo-a600: #db2777;
+  --mo-success: #10b981;
+  --mo-warning: #f59e0b;
+  --mo-danger: #ef4444;
+  --mo-info: #3b82f6;
+  /* 字体栈：Inter / Noto Serif SC / JetBrains Mono 从未通过 @font-face
+     或外链加载，写在这里只会白白回退；已删除，保留原本实际生效的顺序
+     （PingFang SC / Microsoft YaHei / system-ui；Georgia；Fira Code / Consolas）。 */
+  --mo-font-sans: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --mo-font-serif: Georgia, 'Songti SC', serif;
+  --mo-font-mono: 'Fira Code', Consolas, monospace;
+  --mo-r-sm: 6px;
+  --mo-r-md: 8px;
+  --mo-r-lg: 12px;
+  --mo-r-xl: 16px;
+  --mo-r-full: 9999px;
+  --mo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --mo-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --mo-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  /* 字号刻度。用 rem 而非 px：根字号（16px）全库未被改动，默认下 rem 与 px 等价，
+     但 rem 能让「用户调大浏览器默认字号」时文字跟着放大；若这里写 px，现有那批
+     rem 字号会丢掉缩放能力。刻度外的手工值（13px/0.9rem/22px…）暂不归并，
+     上限由 design-source-contract.test.ts 的棘轮守住，只降不升。 */
+  --mo-fs-xs: 0.75rem;
+  --mo-fs-sm: 0.875rem;
+  --mo-fs-md: 1rem;
+  --mo-fs-lg: 1.125rem;
+  --mo-fs-xl: 1.25rem;
+  --mo-fs-2xl: 1.5rem;
+  --mo-fs-3xl: 1.75rem;
+  --mo-fs-4xl: 2rem;
+  --mo-fs-5xl: 2.5rem;
+  --mo-fs-6xl: 3rem;
+  --mo-fs-7xl: 4rem;
+  /* 间距刻度。刻意用 px：间距不该随字号缩放，用 rem 会让调大字号的用户
+     布局被撑开甚至溢出。同样是「只在刻度上的值才走令牌」。 */
+  --mo-sp-1: 4px;
+  --mo-sp-2: 8px;
+  --mo-sp-3: 12px;
+  --mo-sp-4: 16px;
+  --mo-sp-5: 20px;
+  --mo-sp-6: 24px;
+  --mo-sp-7: 32px;
+  --mo-sp-8: 40px;
+  --mo-sp-9: 48px;
+  --mo-sp-10: 64px;
+  --mo-sp-11: 80px;
+  --mo-sp-12: 96px;
+  /* TagsView 标签栏变量 - 全局默认值（浅色模式） */
+  --tags-bg: #fff;
+  --tags-item-border: #d8dce5;
+  --tags-item-text: #495060;
+  --tags-item-bg: #fff;
+  --tags-item-hover: #eee;
+  --tags-close-hover: #b4bccc;
+}
+
+/* ==================== 深色模式全局变量 ==================== */
+html.dark {
+  /* TagsView 标签栏变量 - 深色模式 */
+  --tags-bg: #1d1e1f;
+  --tags-item-border: #434343;
+  --tags-item-text: #e5e8eb;
+  --tags-item-bg: #1d1e1f;
+  --tags-item-hover: #2a2a2a;
+  --tags-close-hover: #909399;
+
+  /* 默认主题深色模式 Element Plus 变量（Tech Blue 深蓝系） */
+  --el-bg-color: #141414;
+  --el-bg-color-page: #0a0a0a;
+  --el-bg-color-overlay: #1d1e1f;
+  --el-text-color-primary: #e5e8eb;
+  --el-text-color-regular: #cfd3dc;
+  --el-text-color-secondary: #a3a8ad;
+  --el-text-color-placeholder: #8d949e;
+  --el-border-color: #3f3f46;
+  --el-border-color-light: #3f3f46;
+  --el-border-color-lighter: #4b4b52;
+  --el-border-color-extra-light: #4b4b52;
+  --el-border-color-dark: #2a2a2a;
+  --el-border-color-darker: #1d1e1f;
+  --el-fill-color: #2a2a2a;
+  --el-fill-color-light: #27272a;
+  --el-fill-color-lighter: #2f2f33;
+  --el-fill-color-extra-light: #2f2f33;
+  --el-fill-color-dark: #1d1e1f;
+  --el-fill-color-darker: #141414;
+  --el-box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.36);
+  --el-box-shadow-light: 0 12px 32px 4px rgba(0, 0, 0, 0.36);
+  --el-box-shadow-lighter: 0 12px 32px 4px rgba(0, 0, 0, 0.36);
+  --el-box-shadow-dark: 0 12px 32px 4px rgba(0, 0, 0, 0.36);
+
+  /* 修复深色模式下 common 元素的样式 */
+  aside {
+    background: transparent;
+  }
+
+  /* 状态栏（草稿/已删除）：中性灰，不在主题色板内 */
+  .sub-navbar.draft,
+  .sub-navbar.deleted {
+    background: #4a4a4a;
+  }
+}
+
+/* ==================== Mo Site 主题样式 ==================== */
+/* 色板（--mo-p* / --mo-n* / --mo-a* / --mo-success 等）、字体栈、圆角
+   （--mo-r-*）、阴影（--mo-shadow-*）、字号（--mo-fs-*）、间距（--mo-sp-*）
+   以及 TagsView 变量都定义在文件顶部的 :root 一处——本类挂在 <html> 上，
+   与 :root 是同一个元素，在这里重复声明只是让两份副本有机会互相漂移
+   （历史上就这么漂过）。这里只留本主题真正专有的 Element Plus 覆盖。 */
+.theme-mo-blog {
+  --el-color-primary: var(--mo-p600);
+  --el-color-primary-light-3: var(--mo-p400);
+  --el-color-primary-light-5: var(--mo-p300);
+  --el-color-primary-light-7: var(--mo-p200);
+  --el-color-primary-light-8: var(--mo-p100);
+  --el-color-primary-light-9: var(--mo-p50);
+  --el-color-primary-dark-2: var(--mo-p700);
+  --el-border-radius-base: var(--mo-r-md);
+  --el-border-color: var(--mo-n200);
+  --el-border-color-light: var(--mo-n200);
+  --el-fill-color-light: var(--mo-n50);
+  --el-text-color-primary: var(--mo-n900);
+  --el-text-color-regular: var(--mo-n700);
+  color: var(--mo-n800);
+  background: var(--mo-n50);
+  font-family: var(--mo-font-sans);
+}
+
+/* 本主题主色是靛蓝（#4f46e5 / 深色 #6366f1），白字对比度 6.29 / 4.47，故选白色。
+   html.theme-mo-blog 用来压过 variables.module.scss 中 :root 的默认深墨色。 */
+html.theme-mo-blog {
+  --mo-on-primary: #ffffff;
+}
+
+.theme-mo-blog body {
+  background: var(--mo-n50);
+  color: var(--mo-n800);
+  font-family: var(--mo-font-sans);
+}
+
+.theme-mo-blog .el-button {
+  border-radius: var(--mo-r-md);
+  font-weight: 600;
+}
+
+/* 主按钮跟「站点设置 → 主题颜色」/行业模板主色走（--el-color-primary 由
+   handleThemeStyle 或 html.tpl-site 映射注入），不再钉死在 Mo-Blog 靛蓝色板：
+   之前主题颜色改了按钮不变，与设置项「影响按钮、链接、标签页和高亮状态」不符。
+   hover/active 用派生深色，避免依赖未被内联覆盖的 --el-color-primary-light-*。 */
+/* 文字/文本按钮（后台表格「编辑/删除/上移」等）必须保留语义色：
+   此前实心主按钮的 --el-button-text-color 也会作用到 is-link，导致所有快捷操作
+   在暗色下变成同一种浅灰、危险操作不红。 */
+.theme-mo-blog .el-button--primary.is-link,
+.theme-mo-blog .el-button--primary.is-text {
+  --el-button-text-color: var(--el-color-primary);
+  --el-button-hover-text-color: var(--el-color-primary-dark-2, var(--el-color-primary));
+  --el-button-active-text-color: var(--el-color-primary);
+}
+
+.theme-mo-blog .el-button--danger.is-link,
+.theme-mo-blog .el-button--danger.is-text {
+  --el-button-text-color: var(--el-color-danger);
+  --el-button-hover-text-color: color-mix(in srgb, var(--el-color-danger) 80%, #fff);
+}
+
+.theme-mo-blog .el-button--success.is-link,
+.theme-mo-blog .el-button--success.is-text {
+  --el-button-text-color: var(--el-color-success);
+  --el-button-hover-text-color: color-mix(in srgb, var(--el-color-success) 80%, #fff);
+}
+
+.theme-mo-blog .el-button--warning.is-link,
+.theme-mo-blog .el-button--warning.is-text {
+  --el-button-text-color: var(--el-color-warning);
+  --el-button-hover-text-color: color-mix(in srgb, var(--el-color-warning) 80%, #fff);
+}
+
+.theme-mo-blog .el-button--info.is-link,
+.theme-mo-blog .el-button--info.is-text {
+  --el-button-text-color: var(--el-color-info);
+  --el-button-hover-text-color: var(--el-color-info);
+}
+
+/* 默认文字按钮（上移/下移等）保持常规文字色，不套 default 按钮的灰底 */
+.theme-mo-blog
+  .el-button.is-link:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(
+    .el-button--danger
+  ):not(.el-button--info),
+.theme-mo-blog
+  .el-button.is-text:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(
+    .el-button--danger
+  ):not(.el-button--info) {
+  --el-button-text-color: var(--el-text-color-secondary);
+  --el-button-hover-text-color: var(--el-color-primary);
+}
+
+/* 标签可读性：info 标签在浅色底/深色底都压到足够对比（Element 默认偏灰） */
+html:not(.dark).theme-mo-blog .el-tag--info {
+  --el-tag-text-color: #57534e;
+}
+
+html.dark.theme-mo-blog .el-tag--info {
+  --el-tag-text-color: var(--mo-n400);
+}
+/* 暗色下默认文字按钮（上移/下移）用 n400 浅灰，避免与主色文字/常规文字同灰度 */
+html.dark.theme-mo-blog
+  .el-button.is-link:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(
+    .el-button--danger
+  ):not(.el-button--info),
+html.dark.theme-mo-blog
+  .el-button.is-text:not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(
+    .el-button--danger
+  ):not(.el-button--info) {
+  --el-button-text-color: var(--mo-n400);
+}
+
+.theme-mo-blog .el-button--primary:not(.is-link):not(.is-text) {
+  --el-button-text-color: var(--mo-on-primary, #fff);
+  --el-button-hover-text-color: var(--mo-on-primary, #fff);
+  --el-button-active-text-color: var(--mo-on-primary, #fff);
+  --el-button-bg-color: var(--el-color-primary);
+  --el-button-border-color: var(--el-color-primary);
+  --el-button-hover-bg-color: var(
+    --el-color-primary-dark-2,
+    color-mix(in srgb, var(--el-color-primary) 82%, #000)
+  );
+  --el-button-hover-border-color: var(
+    --el-color-primary-dark-2,
+    color-mix(in srgb, var(--el-color-primary) 82%, #000)
+  );
+  --el-button-active-bg-color: color-mix(in srgb, var(--el-color-primary) 76%, #000);
+  --el-button-active-border-color: color-mix(in srgb, var(--el-color-primary) 76%, #000);
+}
+
+.theme-mo-blog .el-button--primary.is-plain:not(.is-link):not(.is-text) {
+  --el-button-text-color: var(
+    --el-color-primary-dark-2,
+    color-mix(in srgb, var(--el-color-primary) 82%, #000)
+  );
+  --el-button-bg-color: color-mix(in srgb, var(--el-color-primary) 8%, var(--el-bg-color, #fff));
+  --el-button-border-color: color-mix(
+    in srgb,
+    var(--el-color-primary) 26%,
+    var(--el-bg-color, #fff)
+  );
+  --el-button-hover-text-color: var(--mo-on-primary, #fff);
+  --el-button-hover-bg-color: var(--el-color-primary);
+  --el-button-hover-border-color: var(--el-color-primary);
+  --el-button-active-text-color: var(--mo-on-primary, #fff);
+  --el-button-active-bg-color: var(--el-color-primary-dark-2, var(--el-color-primary));
+  --el-button-active-border-color: var(--el-color-primary-dark-2, var(--el-color-primary));
+}
+
+.theme-mo-blog .el-input__wrapper,
+.theme-mo-blog .el-select__wrapper,
+.theme-mo-blog .el-textarea__inner {
+  border-radius: var(--mo-r-md);
+  box-shadow: 0 0 0 1px var(--mo-n300) inset;
+}
+
+.theme-mo-blog .el-input__wrapper.is-focus,
+.theme-mo-blog .el-select__wrapper.is-focused,
+.theme-mo-blog .el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px var(--el-color-primary) inset,
+    0 0 0 3px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
+}
+
+.theme-mo-blog .el-card,
+.theme-mo-blog .el-dialog,
+.theme-mo-blog .el-message-box {
+  border: 1px solid var(--mo-n200);
+  border-radius: var(--mo-r-lg);
+  box-shadow: var(--mo-shadow-md);
+}
+
+.theme-mo-blog .el-table th.el-table__cell {
+  background: var(--mo-n100);
+  color: var(--mo-n800);
+  font-weight: 700;
+}
+
+.theme-mo-blog .el-table tr:hover > td.el-table__cell {
+  background: var(--mo-n50);
+}
+
+.theme-mo-blog .el-tabs__active-bar {
+  background-color: var(--el-color-primary);
+}
+
+.theme-mo-blog .el-tabs__item.is-active,
+.theme-mo-blog .el-tabs__item:hover {
+  color: var(--el-color-primary);
+}
+
+.theme-mo-blog .el-pagination.is-background .el-pager li.is-active {
+  background: var(--el-color-primary);
+}
+
+.theme-mo-blog .site-layout {
+  background: var(--mo-n50);
+  color: var(--mo-n800);
+  font-family: var(--mo-font-sans);
+}
+
+.theme-mo-blog .site-top-nav {
+  background: rgba(250, 250, 249, 0.9);
+  border-bottom: 1px solid rgba(231, 229, 228, 0.86);
+  box-shadow: var(--mo-shadow-sm);
+}
+
+.theme-mo-blog .nav-inner {
+  max-width: 1180px;
+  height: 60px;
+}
+
+.theme-mo-blog .brand-logo,
+.theme-mo-blog .footer-logo {
+  background: linear-gradient(135deg, var(--el-color-primary), var(--mo-a500));
+  border-radius: var(--mo-r-md);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 25%, transparent);
+}
+
+.theme-mo-blog .brand-name,
+.theme-mo-blog .nav-link.router-link-active,
+.theme-mo-blog .nav-link:hover {
+  color: var(--mo-p700);
+}
+
+.theme-mo-blog .nav-link {
+  color: var(--mo-n600);
+  font-weight: 650;
+}
+
+.theme-mo-blog .theme-btn {
+  border-color: var(--mo-n200);
+  border-radius: var(--mo-r-full);
+  color: var(--mo-n700);
+  background: #fff;
+}
+
+.theme-mo-blog .site-footer {
+  background: var(--mo-n900);
+  color: var(--mo-n100);
+}
+
+.theme-mo-blog .footer-wave {
+  display: none;
+}
+
+.theme-mo-blog .footer-bottom {
+  border-color: rgba(250, 250, 249, 0.12);
+  color: var(--mo-n300);
+}
+
+.theme-mo-blog .contact-card,
+.theme-mo-blog .comment-section,
+.theme-mo-blog .article-navigation,
+.theme-mo-blog .article-actions {
+  border: 1px solid var(--mo-n200);
+  border-radius: var(--mo-r-xl);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--mo-shadow-md);
+}
+
+html.dark.theme-mo-blog .comment-section,
+html.dark.theme-mo-blog .article-navigation,
+html.dark.theme-mo-blog .article-actions {
+  border-color: var(--mo-n700);
+  background: var(--mo-n800);
+}
+
+.theme-mo-blog .section-label,
+.theme-mo-blog .tag,
+.theme-mo-blog .tag-item {
+  border-radius: var(--mo-r-full);
+  background: var(--mo-p50);
+  color: var(--mo-p700);
+  font-weight: 700;
+}
+
+.theme-mo-blog .card-title,
+.theme-mo-blog .article-title {
+  color: var(--mo-n900);
+  font-family: var(--mo-font-serif);
+  letter-spacing: 0;
+}
+
+.theme-mo-blog .article-meta,
+.theme-mo-blog .meta-item {
+  color: var(--mo-n600);
+}
+
+.theme-mo-blog .article-detail {
+  background: var(--mo-n50);
+}
+
+.theme-mo-blog .article-header {
+  padding-top: 104px;
+  background: linear-gradient(180deg, var(--mo-p50), rgba(250, 250, 249, 0));
+  text-align: center;
+}
+
+.theme-mo-blog .article-content {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.theme-mo-blog .content-body {
+  max-width: 760px;
+  margin: 0 auto;
+  color: var(--mo-n800);
+  font-family: var(--mo-font-serif);
+  font-size: 17px;
+  line-height: 1.9;
+}
+
+.theme-mo-blog .content-body h1,
+.theme-mo-blog .content-body h2,
+.theme-mo-blog .content-body h3 {
+  color: var(--mo-n900);
+  font-family: var(--mo-font-sans);
+  letter-spacing: 0;
+}
+
+.theme-mo-blog .content-body blockquote {
+  border-left: 4px solid var(--mo-p500);
+  border-radius: 0 var(--mo-r-md) var(--mo-r-md) 0;
+  background: var(--mo-p50);
+  color: var(--mo-n700);
+}
+
+.theme-mo-blog .content-body pre,
+.theme-mo-blog .content-body code {
+  font-family: var(--mo-font-mono);
+}
+
+.theme-mo-blog .content-body pre {
+  border-radius: var(--mo-r-lg);
+  background: #111827;
+  box-shadow: var(--mo-shadow-md);
+}
+
+.theme-mo-blog .comment-item {
+  border-color: var(--mo-n200);
+}
+
+.theme-mo-blog .comment-avatar img {
+  border: 2px solid var(--mo-p100);
+}
+
+.theme-mo-blog .app-wrapper,
+.theme-mo-blog .main-container,
+.theme-mo-blog .app-main {
+  background: var(--mo-n50);
+}
+
+.theme-mo-blog .app-main {
+  color: var(--mo-n800);
+}
+
+.theme-mo-blog .app-container {
+  min-height: calc(100vh - 112px);
+  margin: 0;
+  padding: 18px;
+  color: var(--mo-n800);
+  background: var(--mo-n50);
+  font-family: var(--mo-font-sans);
+}
+
+.theme-mo-blog .sidebar-container {
+  background: linear-gradient(180deg, var(--mo-n900), #171312);
+  border-right: 1px solid rgba(250, 250, 249, 0.08);
+  box-shadow: none;
+}
+
+.theme-mo-blog .sidebar-logo-container {
+  height: 54px;
+  line-height: 54px;
+  background: rgba(17, 24, 39, 0.46);
+  border-bottom: 1px solid rgba(250, 250, 249, 0.08);
+}
+
+.theme-mo-blog .sidebar-logo-container .sidebar-title {
+  color: var(--mo-n50);
+  font-family: var(--mo-font-sans);
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.theme-mo-blog .sidebar-logo-container .sidebar-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--mo-r-md);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 28%, transparent);
+}
+
+.theme-mo-blog .sidebar-container .el-scrollbar {
+  background: transparent;
+}
+
+.theme-mo-blog .sidebar-container .el-menu,
+.theme-mo-blog .sidebar-container .el-sub-menu,
+.theme-mo-blog .sidebar-container .el-menu-item {
+  background: transparent;
+}
+
+.theme-mo-blog .sidebar-container .el-menu {
+  padding: 8px 8px 14px;
+}
+
+.theme-mo-blog .sidebar-container .el-menu-item,
+.theme-mo-blog .sidebar-container .el-sub-menu__title {
+  height: 42px;
+  margin: 3px 0;
+  border-radius: var(--mo-r-md);
+  color: var(--mo-n300);
+  font-weight: 650;
+}
+
+.theme-mo-blog .sidebar-container .svg-icon {
+  color: currentColor;
+}
+
+.theme-mo-blog .sidebar-container .el-menu-item.is-active {
+  color: var(--mo-on-primary, #fff);
+  background: var(--el-color-primary);
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--el-color-primary) 26%, transparent);
+}
+
+.theme-mo-blog .sidebar-container .el-sub-menu__title:hover,
+.theme-mo-blog .sidebar-container .el-menu-item:hover {
+  color: var(--mo-on-primary, #fff);
+  background: color-mix(in srgb, var(--el-color-primary) 32%, transparent);
+}
+
+.theme-mo-blog .sidebar-container .nest-menu .el-sub-menu > .el-sub-menu__title,
+.theme-mo-blog .sidebar-container .el-sub-menu .el-menu-item {
+  min-width: auto !important;
+  background: transparent;
+}
+
+.theme-mo-blog .hideSidebar .sidebar-container .el-menu {
+  padding-inline: 6px;
+}
+
+.theme-mo-blog .hideSidebar .sidebar-container .el-menu-item,
+.theme-mo-blog .hideSidebar .sidebar-container .el-sub-menu__title {
+  justify-content: center;
+}
+
+.theme-mo-blog .navbar {
+  height: 54px;
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(231, 229, 228, 0.84);
+  box-shadow: var(--mo-shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.theme-mo-blog .navbar .hamburger-container {
+  line-height: 54px;
+  color: var(--mo-n700);
+}
+
+.theme-mo-blog .navbar .hamburger-container:hover,
+.theme-mo-blog .navbar .right-menu .hover-effect:hover {
+  background: var(--mo-p50);
+  color: var(--mo-p700);
+}
+
+.theme-mo-blog .navbar .breadcrumb-container,
+.theme-mo-blog .navbar .right-menu,
+.theme-mo-blog .navbar .right-menu .right-menu-item {
+  height: 54px;
+  line-height: 54px;
+  color: var(--mo-n600);
+}
+
+.theme-mo-blog .navbar .right-menu .right-menu-item {
+  font-size: 17px;
+}
+
+.theme-mo-blog .navbar .avatar-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mo-sp-2);
+  height: 54px;
+  margin-top: 0;
+  padding: 0 var(--mo-sp-3);
+  right: auto;
+}
+
+.theme-mo-blog .navbar .avatar-wrapper .user-avatar {
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--mo-p100);
+}
+
+.theme-mo-blog .navbar .avatar-wrapper .user-nickname {
+  position: static;
+  color: var(--mo-n700);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.theme-mo-blog .tags-view-container {
+  height: 38px;
+  background: rgba(250, 250, 249, 0.92);
+  border-bottom: 1px solid var(--mo-n200);
+  box-shadow: none;
+}
+
+.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item {
+  height: 28px;
+  margin-top: 5px;
+  border-color: transparent;
+  border-radius: var(--mo-r-full);
+  color: var(--mo-n600);
+  background: transparent;
+  font-weight: 650;
+}
+
+.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item:hover {
+  color: var(--el-color-primary);
+  background: color-mix(in srgb, var(--el-color-primary) 8%, var(--el-bg-color, #fff));
+}
+
+.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item.active {
+  color: var(--mo-on-primary, #fff);
+  background: var(--el-color-primary) !important;
+  border-color: var(--el-color-primary) !important;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 22%, transparent);
+}
+
+.theme-mo-blog .tags-view-container .contextmenu {
+  padding: 6px;
+  border-color: var(--mo-n200);
+  border-radius: var(--mo-r-md);
+  color: var(--mo-n700);
+  box-shadow: var(--mo-shadow-lg);
+}
+
+.theme-mo-blog .tags-view-container .contextmenu li {
+  border-radius: var(--mo-r-sm);
+}
+
+.theme-mo-blog .tags-view-container .contextmenu li:hover {
+  color: var(--mo-p700);
+  background: var(--mo-p50);
+}
+
+html.dark.theme-mo-blog .tags-view-container {
+  background: rgba(28, 25, 23, 0.92);
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item:hover {
+  color: var(--mo-p300);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .tags-view-container .tags-view-wrapper .tags-view-item.active {
+  color: var(--mo-on-primary);
+  background: var(--mo-p500);
+  border-color: var(--mo-p500);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 32%, transparent);
+}
+
+html.dark.theme-mo-blog .tags-view-container .contextmenu {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .tags-view-container .contextmenu li:hover {
+  color: var(--mo-p300);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+.theme-mo-blog .editor-container,
+.theme-mo-blog .profile-container,
+.theme-mo-blog .login,
+.theme-mo-blog .register {
+  color: var(--mo-n800);
+  font-family: var(--mo-font-sans);
+}
+
+.theme-mo-blog .el-card,
+.theme-mo-blog .search-form,
+.theme-mo-blog .table-container,
+.theme-mo-blog .profile-card,
+.theme-mo-blog .user-info,
+.theme-mo-blog .editor-wrapper,
+.theme-mo-blog .tox-tinymce {
+  border-color: var(--mo-n200);
+  border-radius: var(--mo-r-lg);
+  background: #fff;
+}
+
+.theme-mo-blog .el-card {
+  box-shadow: var(--mo-shadow-sm);
+}
+
+.theme-mo-blog .el-card__header {
+  padding: 14px 16px;
+  border-bottom-color: var(--mo-n200);
+  color: var(--mo-n900);
+  font-weight: 750;
+}
+
+.theme-mo-blog .el-form {
+  border-color: var(--mo-n200);
+  border-radius: var(--mo-r-lg);
+}
+
+.theme-mo-blog .el-form-item__label {
+  color: var(--mo-n600);
+  font-weight: 650;
+}
+
+.theme-mo-blog .el-table {
+  overflow: hidden;
+  border: 1px solid var(--mo-n200);
+  border-radius: var(--mo-r-lg);
+  color: var(--mo-n700);
+  background: #fff;
+  box-shadow: var(--mo-shadow-sm);
+}
+
+.theme-mo-blog .el-table::before,
+.theme-mo-blog .el-table__inner-wrapper::before {
+  background: var(--mo-n200);
+}
+
+.theme-mo-blog .el-table th.el-table__cell {
+  height: 42px;
+  background: var(--mo-n100);
+  color: var(--mo-n800);
+  font-weight: 750;
+}
+
+.theme-mo-blog .el-table td.el-table__cell {
+  border-bottom-color: var(--mo-n100);
+}
+
+.theme-mo-blog .el-table tr:hover > td.el-table__cell {
+  background: var(--mo-p50);
+}
+
+.theme-mo-blog .el-tag {
+  border-radius: var(--mo-r-full);
+  font-weight: 700;
+}
+
+.theme-mo-blog .el-tag.el-tag--primary,
+.theme-mo-blog .el-tag--primary {
+  --el-tag-bg-color: var(--mo-p50);
+  --el-tag-border-color: var(--mo-p100);
+  --el-tag-text-color: var(--mo-p700);
+}
+
+.theme-mo-blog .el-pagination {
+  --el-pagination-button-bg-color: #fff;
+  --el-pagination-hover-color: var(--mo-p600);
+  margin-top: var(--mo-sp-4);
+}
+
+.theme-mo-blog .el-pagination .btn-prev,
+.theme-mo-blog .el-pagination .btn-next,
+.theme-mo-blog .el-pagination .el-pager li {
+  border-radius: var(--mo-r-md);
+}
+
+.theme-mo-blog .el-dialog {
+  overflow: hidden;
+  border-radius: var(--mo-r-lg);
+}
+
+.theme-mo-blog .el-dialog__header {
+  margin-right: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--mo-n200);
+  background: var(--mo-n50);
+}
+
+.theme-mo-blog .el-dialog__title {
+  color: var(--mo-n900);
+  font-weight: 750;
+}
+
+.theme-mo-blog .el-dialog__body {
+  padding: 18px;
+}
+
+.theme-mo-blog .el-drawer__header {
+  margin-bottom: 0;
+  padding: var(--mo-sp-4);
+  border-bottom: 1px solid var(--mo-n200);
+  color: var(--mo-n900);
+  font-weight: 750;
+}
+
+.theme-mo-blog .el-dropdown-menu {
+  border-color: var(--mo-n200);
+  border-radius: var(--mo-r-md);
+  box-shadow: var(--mo-shadow-lg);
+}
+
+.theme-mo-blog .el-dropdown-menu__item:hover {
+  color: var(--mo-p700);
+  background: var(--mo-p50);
+}
+
+.theme-mo-blog .el-alert {
+  border-radius: var(--mo-r-md);
+}
+
+.theme-mo-blog .tox-tinymce {
+  box-shadow: var(--mo-shadow-sm);
+}
+
+.theme-mo-blog .login,
+.theme-mo-blog .register {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(236, 72, 153, 0.22), transparent 28%),
+    linear-gradient(135deg, var(--mo-p900), var(--mo-p600) 54%, var(--mo-a500));
+}
+
+.theme-mo-blog .login-form,
+.theme-mo-blog .register-form {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: var(--mo-r-xl);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--mo-shadow-lg);
+}
+
+/* ==================== Mo Site 深色模式 ==================== */
+
+/* 登录/注册卡片深色模式 */
+html.dark.theme-mo-blog .login-form,
+html.dark.theme-mo-blog .register-form,
+html.dark.theme-mo-blog .auth-card {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .auth-switch {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .switch-item.active {
+  background: var(--mo-n600);
+}
+
+html.dark.theme-mo-blog .auth-head h2,
+html.dark.theme-mo-blog .auth-brand {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .form-group label {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .sub,
+html.dark.theme-mo-blog .remember,
+html.dark.theme-mo-blog .auth-footer {
+  color: var(--mo-n400);
+}
+
+/* TagsView 标签栏变量 - 深色模式 */
+html.dark.theme-mo-blog .tags-view-container {
+  --tags-bg: var(--mo-n800);
+  --tags-item-border: var(--mo-n700);
+  --tags-item-text: var(--mo-n300);
+  --tags-item-bg: var(--mo-n800);
+  --tags-item-hover: var(--mo-n700);
+  --tags-close-hover: var(--mo-n500);
+}
+
+@media (max-width: 1024px) {
+  .theme-mo-blog .nav-center {
+    gap: var(--mo-sp-2);
+  }
+
+  .theme-mo-blog .article-content {
+    padding-inline: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .theme-mo-blog .nav-inner {
+    height: auto;
+    min-height: 60px;
+    padding: 10px 16px;
+  }
+
+  .theme-mo-blog .nav-center {
+    display: none;
+  }
+
+  .theme-mo-blog .article-title {
+    font-size: clamp(28px, 8vw, 42px);
+  }
+
+  .theme-mo-blog .content-body {
+    font-size: var(--mo-fs-md);
+    line-height: 1.82;
+  }
+}
+
+.theme-mo-blog .site-layout .site-top-nav {
+  background: rgba(250, 250, 249, 0.92);
+  border-bottom-color: rgba(231, 229, 228, 0.9);
+  box-shadow: var(--mo-shadow-sm);
+}
+
+.theme-mo-blog .site-layout .nav-inner {
+  max-width: 1180px;
+  height: 60px;
+}
+
+.theme-mo-blog .site-layout .brand-logo,
+.theme-mo-blog .site-layout .footer-logo {
+  background: linear-gradient(135deg, var(--mo-p600), var(--mo-a500));
+  border-radius: var(--mo-r-md);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--el-color-primary) 25%, transparent);
+}
+
+.theme-mo-blog .site-layout .brand-name,
+.theme-mo-blog .site-layout .nav-link:hover,
+.theme-mo-blog .site-layout .nav-link.router-link-active {
+  color: var(--mo-p700);
+}
+
+.theme-mo-blog .site-layout .nav-link:hover,
+.theme-mo-blog .site-layout .nav-link.router-link-active,
+.theme-mo-blog .site-layout .user-info:hover,
+.theme-mo-blog .site-layout .theme-btn:hover {
+  background: var(--mo-p50);
+}
+
+.theme-mo-blog .site-layout .site-footer {
+  background: var(--mo-n900);
+}
+
+/* 该主题页脚在浅色模式下也是深色底（n900），而 SiteLayout 的页脚文字是按浅底写的
+   深灰（n800/n600/n500 → 1.15~3.65:1），浅色下必须换成浅色文字；
+   深色模式的对应覆盖见 theme-dark.css。 */
+html:not(.dark).theme-mo-blog .site-layout .site-footer .brand-name,
+html:not(.dark).theme-mo-blog .site-layout .site-footer .footer-col h4 {
+  color: var(--mo-n100);
+}
+
+html:not(.dark).theme-mo-blog .site-layout .site-footer .brand-desc,
+html:not(.dark).theme-mo-blog .site-layout .site-footer .footer-col a,
+html:not(.dark).theme-mo-blog .site-layout .site-footer .footer-bottom {
+  color: var(--mo-n300);
+}
+
+html:not(.dark).theme-mo-blog .site-layout .site-footer .footer-col a:hover {
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .site-layout .site-top-nav {
+  background: rgba(28, 25, 23, 0.92);
+  border-bottom-color: var(--mo-n700);
+  box-shadow: none;
+}
+
+html.dark.theme-mo-blog .site-layout .brand-name,
+html.dark.theme-mo-blog .site-layout .username {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .site-layout .nav-link,
+html.dark.theme-mo-blog .site-layout .brand-desc {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .site-layout .nav-link:hover,
+html.dark.theme-mo-blog .site-layout .nav-link.router-link-active {
+  color: var(--mo-p300);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .site-layout .user-info,
+html.dark.theme-mo-blog .user-info {
+  background: transparent;
+}
+
+html.dark.theme-mo-blog .site-layout .user-info:hover,
+html.dark.theme-mo-blog .site-layout .theme-btn:hover,
+html.dark.theme-mo-blog .site-layout .nav-link:hover,
+html.dark.theme-mo-blog .site-layout .nav-link.router-link-active {
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .site-layout .avatar-placeholder {
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .site-layout .dropdown-icon {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .site-layout .theme-btn {
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .site-layout .site-footer {
+  background: var(--mo-n800);
+  border-top-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .site-layout .footer-col a,
+html.dark.theme-mo-blog .site-layout .footer-bottom,
+html.dark.theme-mo-blog .site-layout .site-footer {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .site-layout .footer-col a:hover {
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .site-layout .footer-wave {
+  /* 暗色下 --mo-n900 已被重映射为**背景色**，用作文字色即 1.0:1 不可见。
+     改用暗色文字色阶（--mo-n200 = --el-text-color-primary）。 */
+  color: var(--mo-n200);
+}
+
+html.dark.theme-mo-blog .site-layout .footer-logo {
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+  color: var(--mo-p300);
+}
+
+.theme-mo-blog .site-layout .footer-wave {
+  display: none;
+}
+
+.theme-mo-blog .site-home-v2 {
+  background: var(--mo-n50);
+  color: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .mo-home-page .home-hero .search-box input {
+  border-color: var(--mo-n700);
+  background: var(--mo-n800);
+  color: var(--mo-n100);
+}
+
+.theme-mo-blog .site-home-v2 .tag {
+  border-radius: var(--mo-r-full);
+  background: var(--mo-p50);
+  color: var(--mo-p700);
+}
+
+.theme-mo-blog .article-detail-container .article-detail {
+  background: var(--mo-n50);
+}
+
+.theme-mo-blog .article-detail-container .article-header {
+  background: linear-gradient(180deg, var(--mo-p50), rgba(250, 250, 249, 0));
+  text-align: center;
+}
+
+.theme-mo-blog .article-detail-container .article-title {
+  color: var(--mo-n900);
+  font-family: var(--mo-font-serif);
+  letter-spacing: 0;
+}
+
+.theme-mo-blog .article-detail-container .article-actions,
+.theme-mo-blog .article-detail-container .article-navigation,
+.theme-mo-blog .article-detail-container .related-articles,
+.theme-mo-blog .article-detail-container .comment-section {
+  border: 1px solid var(--mo-n200);
+  border-radius: var(--mo-r-xl);
+  background: #fff;
+  box-shadow: var(--mo-shadow-md);
+}
+
+html.dark.theme-mo-blog .article-detail-container .article-actions,
+html.dark.theme-mo-blog .article-detail-container .article-navigation,
+html.dark.theme-mo-blog .article-detail-container .related-articles,
+html.dark.theme-mo-blog .article-detail-container .comment-section,
+html.dark.theme-mo-blog .article-detail-container .author-card,
+html.dark.theme-mo-blog .article-detail-container .side-widget,
+html.dark.theme-mo-blog .article-detail-container .nav-item,
+html.dark.theme-mo-blog .article-detail-container .comment-input,
+html.dark.theme-mo-blog .article-detail-container .c-reply,
+html.dark.theme-mo-blog .article-detail-container .not-found-content,
+html.dark.theme-mo-blog .article-detail-container .toc .article-toc {
+  border-color: var(--mo-n700);
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .article-detail-container {
+  background: var(--mo-n900);
+}
+
+html.dark.theme-mo-blog .article-detail-container .article-detail,
+html.dark.theme-mo-blog .article-detail-container .not-found-container {
+  background: var(--mo-n900);
+}
+
+html.dark.theme-mo-blog .article-detail-container .article-header {
+  background: linear-gradient(180deg, var(--mo-p900), rgba(28, 25, 23, 0));
+}
+
+html.dark.theme-mo-blog .article-detail-container .article-title,
+html.dark.theme-mo-blog .article-detail-container .content-body,
+html.dark.theme-mo-blog .article-detail-container .wt,
+html.dark.theme-mo-blog .article-detail-container .a-stat .lbl,
+html.dark.theme-mo-blog .article-detail-container .related-mini {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .article-detail-container .tc {
+  background: var(--mo-n700);
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .article-detail-container .toc,
+html.dark.theme-mo-blog .article-detail-container .article-side {
+  background: transparent;
+}
+
+html.dark.theme-mo-blog .article-detail-container .toc .toc-header,
+html.dark.theme-mo-blog .article-detail-container .toc .toc-item {
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog aside {
+  background: transparent;
+}
+
+html.dark.theme-mo-blog .mo-home-page .sidebar-widget,
+html.dark.theme-mo-blog .mo-home-page .article-card,
+html.dark.theme-mo-blog .mo-home-page .pg {
+  border-color: var(--mo-n700);
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .mo-home-page .widget-title {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .mo-home-page .cat-item,
+html.dark.theme-mo-blog .mo-home-page .htitle,
+html.dark.theme-mo-blog .mo-home-page .hmeta {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .mo-home-page .cat-item:hover,
+html.dark.theme-mo-blog .mo-home-page .cat-item.active,
+html.dark.theme-mo-blog .mo-home-page .tc:hover,
+html.dark.theme-mo-blog .mo-home-page .tc.lg {
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .mo-home-page .tc,
+html.dark.theme-mo-blog .mo-home-page .cat-item .count {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog body {
+  background: var(--mo-n900);
+  color: var(--mo-n300);
+}
+
+/* ========== 管理后台暗色模式覆盖 ========== */
+
+html.dark.theme-mo-blog .app-wrapper,
+html.dark.theme-mo-blog .main-container,
+html.dark.theme-mo-blog .app-main,
+html.dark.theme-mo-blog .app-container {
+  background: var(--mo-n900);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .navbar {
+  background: var(--mo-n800);
+  border-bottom-color: var(--mo-n700);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+html.dark.theme-mo-blog .navbar .hamburger-container,
+html.dark.theme-mo-blog .navbar .right-menu .right-menu-item,
+html.dark.theme-mo-blog .navbar .breadcrumb-container {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .navbar .avatar-wrapper .user-nickname {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .navbar .avatar-wrapper .user-avatar {
+  border-color: var(--mo-n600);
+}
+
+/* 侧边栏渐变：从 n900 到更深的棕色（#171312），装饰性效果 */
+html.dark.theme-mo-blog .sidebar-container {
+  background: linear-gradient(180deg, var(--mo-n900), #171312);
+  border-right-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .sidebar-container .sidebar-logo-container,
+html.dark.theme-mo-blog .sidebar-container .sidebar-logo {
+  background: var(--mo-n900);
+}
+
+html.dark.theme-mo-blog .sidebar-container .sidebar-logo-container .sidebar-logo-link,
+html.dark.theme-mo-blog
+  .sidebar-container
+  .sidebar-logo-container
+  .sidebar-logo-link
+  .sidebar-title {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .el-card,
+html.dark.theme-mo-blog .search-form,
+html.dark.theme-mo-blog .table-container,
+html.dark.theme-mo-blog .profile-card,
+html.dark.theme-mo-blog .editor-wrapper,
+html.dark.theme-mo-blog .tox-tinymce {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-card__header {
+  border-bottom-color: var(--mo-n700);
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .el-table {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-table th.el-table__cell,
+html.dark.theme-mo-blog .el-table .el-table__header-wrapper th,
+html.dark.theme-mo-blog .el-table .el-table__fixed-header-wrapper th {
+  background: var(--mo-n700) !important;
+  color: var(--mo-n100);
+  border-color: var(--mo-n600);
+}
+
+html.dark.theme-mo-blog .el-table td.el-table__cell {
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-table tr,
+html.dark.theme-mo-blog .el-table tr.el-table__row--striped td.el-table__cell {
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .el-table tr:hover > td.el-table__cell {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+}
+
+html.dark.theme-mo-blog .el-table::before,
+html.dark.theme-mo-blog .el-table__inner-wrapper::before {
+  background: var(--mo-n700);
+}
+
+/* 后台输入框：深色底 + 浅色文字。n700 在深色模式下是浅色文字色，
+   不能当背景（曾导致所有后台输入框变成白底）。 */
+html.dark.theme-mo-blog .el-input__wrapper {
+  background: var(--mo-n50);
+  box-shadow: 0 0 0 1px var(--mo-n200) inset;
+}
+
+html.dark.theme-mo-blog .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1px var(--mo-p400) inset,
+    0 0 0 3px color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .el-input__inner,
+html.dark.theme-mo-blog .el-textarea__inner {
+  color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-input__inner::placeholder,
+html.dark.theme-mo-blog .el-textarea__inner::placeholder {
+  color: var(--mo-n500);
+}
+
+html.dark.theme-mo-blog .el-form-item__label {
+  /* 后台作用域没有 --mo-n* 重映射，n300 会是浅色主题的中灰（深色底上 ≈2:1）；
+     直接用 Element Plus 的常规文字色，跟随当前主题深色配色 */
+  color: var(--el-text-color-regular);
+}
+
+html.dark.theme-mo-blog .el-select .el-input__wrapper,
+html.dark.theme-mo-blog .el-date-editor .el-input__wrapper {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-select-dropdown {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-select-dropdown__item {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-select-dropdown__item.hover,
+html.dark.theme-mo-blog .el-select-dropdown__item:hover {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-pagination {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-pagination button,
+html.dark.theme-mo-blog .el-pagination .el-pager li {
+  background: var(--mo-n800);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-pagination button:disabled {
+  background: var(--mo-n800);
+  color: var(--mo-n500);
+}
+
+html.dark.theme-mo-blog .el-dialog,
+html.dark.theme-mo-blog .el-message-box {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-dialog__title,
+html.dark.theme-mo-blog .el-message-box__title {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .el-dialog__body,
+html.dark.theme-mo-blog .el-message-box__content {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-dialog__headerbtn .el-dialog__close {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .el-menu {
+  background: transparent;
+}
+
+html.dark.theme-mo-blog .el-menu-item,
+html.dark.theme-mo-blog .el-sub-menu__title {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-menu-item:hover,
+html.dark.theme-mo-blog .el-sub-menu__title:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+}
+
+html.dark.theme-mo-blog .el-menu-item.is-active,
+html.dark.theme-mo-blog .sidebar-container .el-sub-menu .el-menu-item.is-active,
+html.dark.theme-mo-blog .sidebar-container .nest-menu .el-sub-menu > .el-sub-menu__title,
+html.dark.theme-mo-blog .sidebar-container .el-sub-menu .el-menu-item {
+  color: var(--mo-p300) !important;
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent) !important;
+}
+
+html.dark.theme-mo-blog .sidebar-container .el-sub-menu .el-menu-item:hover,
+html.dark.theme-mo-blog .sidebar-container .nest-menu .el-sub-menu > .el-sub-menu__title:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent) !important;
+}
+
+html.dark.theme-mo-blog .sidebar-container .el-sub-menu .el-menu-item,
+html.dark.theme-mo-blog .sidebar-container .nest-menu .el-sub-menu > .el-sub-menu__title {
+  color: var(--mo-n300) !important;
+}
+
+html.dark.theme-mo-blog .el-sub-menu.is-active > .el-sub-menu__title,
+html.dark.theme-mo-blog .el-sub-menu__title.is-active {
+  color: var(--mo-p300) !important;
+}
+
+html.dark.theme-mo-blog .el-sub-menu__icon-arrow {
+  color: var(--mo-n400);
+}
+
+/* 暗色下 effect="dark" 的语义标签：Element 用亮色实底 + 白字（#67c23a/#e6a23c 白字仅
+   2.2~2.4:1）。改为「语义色 × 深底」底色 + 提亮文字，两种模式都保持语义可辨。 */
+html.dark.theme-mo-blog .el-tag--dark.el-tag--success {
+  --el-tag-bg-color: color-mix(in srgb, var(--el-color-success) 30%, #1d1d1d);
+  --el-tag-border-color: color-mix(in srgb, var(--el-color-success) 45%, #1d1d1d);
+  --el-tag-text-color: color-mix(in srgb, var(--el-color-success) 55%, #fff);
+}
+
+html.dark.theme-mo-blog .el-tag--dark.el-tag--warning {
+  --el-tag-bg-color: color-mix(in srgb, var(--el-color-warning) 30%, #1d1d1d);
+  --el-tag-border-color: color-mix(in srgb, var(--el-color-warning) 45%, #1d1d1d);
+  --el-tag-text-color: color-mix(in srgb, var(--el-color-warning) 60%, #fff);
+}
+
+html.dark.theme-mo-blog .el-tag--dark.el-tag--danger {
+  --el-tag-bg-color: color-mix(in srgb, var(--el-color-danger) 30%, #1d1d1d);
+  --el-tag-border-color: color-mix(in srgb, var(--el-color-danger) 45%, #1d1d1d);
+  --el-tag-text-color: color-mix(in srgb, var(--el-color-danger) 45%, #fff);
+}
+
+html.dark.theme-mo-blog .el-tag--dark.el-tag--info {
+  --el-tag-bg-color: color-mix(in srgb, var(--el-color-info) 30%, #1d1d1d);
+  --el-tag-border-color: color-mix(in srgb, var(--el-color-info) 45%, #1d1d1d);
+  --el-tag-text-color: color-mix(in srgb, var(--el-color-info) 55%, #fff);
+}
+
+/* 只给「无类型」的默认 tag 中性色；此前 blanket 规则把 info/success/warning/danger
+   tag 全部灰化，暗色下「站内路径 / 页面 / 分类 / 栏目名称控制」再也分不出颜色。 */
+html.dark.theme-mo-blog .el-tag:not([class*='el-tag--']) {
+  background: var(--mo-n700);
+  border-color: var(--mo-n600);
+  color: var(--mo-n200);
+}
+
+/* 仅实心 default 按钮（表格「更多操作」/弹窗取消等）；文字按钮不套灰底。
+   必须排除语义类型：.el-button--primary 等同时带 el-button--default（尺寸类），
+   否则「发布文章」这类主按钮会被本条灰底规则覆盖成浅色按钮。 */
+html.dark.theme-mo-blog
+  .el-button--default:not(.is-link):not(.is-text):not(.el-button--primary):not(
+    .el-button--success
+  ):not(.el-button--warning):not(.el-button--danger):not(.el-button--info) {
+  background: var(--mo-n50);
+  border-color: var(--mo-n200);
+  color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog
+  .el-button--default:not(.is-link):not(.is-text):not(.el-button--primary):not(
+    .el-button--success
+  ):not(.el-button--warning):not(.el-button--danger):not(.el-button--info):hover {
+  background: var(--mo-n100);
+  border-color: var(--mo-n300);
+  color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-tabs__nav-wrap::after {
+  background-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-tabs__item {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .el-tabs__item.is-active {
+  color: var(--mo-p300);
+}
+
+html.dark.theme-mo-blog .el-tabs__item:hover {
+  color: var(--mo-p400);
+}
+
+html.dark.theme-mo-blog .el-tabs__active-bar {
+  background-color: var(--mo-p500);
+}
+
+html.dark.theme-mo-blog .el-drawer {
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .el-tree {
+  background: var(--mo-n800);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-tree-node__content:hover {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-tree-node.is-current > .el-tree-node__content {
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .el-checkbox__label,
+html.dark.theme-mo-blog .el-radio__label {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-radio__input.is-checked .el-radio__inner {
+  background: var(--mo-p600);
+  border-color: var(--mo-p600);
+}
+
+html.dark.theme-mo-blog .el-radio__inner {
+  background: var(--mo-n700);
+  border-color: var(--mo-n600);
+}
+
+html.dark.theme-mo-blog .el-radio__inner:hover {
+  border-color: var(--mo-n500);
+}
+
+html.dark.theme-mo-blog .el-switch__label {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-empty__description {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .el-divider {
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-divider__text {
+  background: var(--mo-n800);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-collapse-item__header,
+html.dark.theme-mo-blog .el-collapse-item__wrap {
+  background: var(--mo-n800);
+  color: var(--mo-n300);
+  border-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-progress-bar__outer {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-tooltip__popper {
+  background: var(--mo-n600);
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .el-popper {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-popper.is-light {
+  background: var(--mo-n800);
+  border-color: var(--mo-n700);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .tox .tox-toolbar__primary,
+html.dark.theme-mo-blog .tox .tox-edit-area__iframe,
+html.dark.theme-mo-blog .tox .tox-tinymce {
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .tox .tox-toolbar-overlord {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .tox .tox-mbtn,
+html.dark.theme-mo-blog .tox .tox-tbtn {
+  color: var(--mo-n300);
+}
+
+.theme-mo-blog .article-detail-container .content-body {
+  color: var(--mo-n800);
+  font-family: var(--mo-font-serif);
+  font-size: 17px;
+  line-height: 1.9;
+}
+
+.theme-mo-blog .article-detail-container .content-body blockquote {
+  border-left-color: var(--mo-p500);
+  background: var(--mo-p50);
+}
+
+/* ========== Mo Site 暗色主题 CSS 变量覆盖（全局，不带 scoped 属性） ========== */
+html.dark.theme-mo-blog {
+  --tech-primary: var(--el-color-primary);
+  --tech-primary-dark: var(--el-color-primary-dark-2, var(--el-color-primary));
+  --tech-bg: #1c1917;
+  --tech-bg-light: #292524;
+  --tech-text: #d6d3d1;
+  --tech-text-dark: #a8a29e;
+
+  --el-bg-color: #1c1917;
+  --el-bg-color-overlay: #292524;
+  --el-bg-color-page: #1c1917;
+  --el-text-color-primary: #d6d3d1;
+  --el-text-color-regular: #a8a29e;
+  /* 主色由 theme-dark.css 的深色派生统一接管（见 html.dark:not(.tpl-site)） */
+  --el-color-primary: var(--theme-primary);
+  --el-border-color: #44403c;
+  --el-border-color-light: #44403c;
+  --el-border-color-lighter: #44403c;
+  --el-fill-color: #292524;
+  --el-fill-color-light: #292524;
+  --el-fill-color-blank: #1c1917;
+
+  --sidebar-bg: #1c1917;
+  --sidebar-text: #d6d3d1;
+  --menu-hover: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+  --menu-active-text: var(--mo-p300);
+  --menu-text: #d6d3d1;
+  --submenu-text: #d6d3d1;
+  --submenu-bg: transparent;
+  --submenu-active: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+  --submenu-hover: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+
+  --navbar-bg: #292524;
+  --navbar-text: #d6d3d1;
+  --navbar-hover: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+}
+
+/* ========== 文章编辑器暗色覆盖 ========== */
+html.dark.theme-mo-blog .mo-editor-form {
+  background: var(--mo-n800);
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .editor-topbar {
+  background: var(--mo-n800);
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .editor-topbar .back-btn {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .editor-toolbar {
+  background: var(--mo-n900);
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .editor-toolbar .tool {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .editor-toolbar .tool:hover,
+html.dark.theme-mo-blog .editor-toolbar .tool.active {
+  color: var(--mo-p300);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+html.dark.theme-mo-blog .editor-toolbar .sep {
+  background: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .editor-main {
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .editor-body {
+  background: var(--mo-n800);
+}
+
+html.dark.theme-mo-blog .editor-side-panel {
+  background: var(--mo-n900);
+  border-left-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .side-section {
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .side-title {
+  color: var(--mo-n100);
+}
+
+html.dark.theme-mo-blog .editor-preview {
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .preview-empty {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .save-status {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .view-modes .tool {
+  color: var(--mo-n400);
+}
+
+html.dark.theme-mo-blog .view-modes .tool.active {
+  color: var(--mo-p300);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+/* ========== 对话框 header 暗色覆盖 ========== */
+html.dark.theme-mo-blog .el-dialog__header,
+html.dark.theme-mo-blog .el-message-box__header {
+  background: var(--mo-n800);
+  border-bottom: 1px solid var(--mo-n700);
+}
+
+html.dark.theme-mo-blog .el-dialog__body,
+html.dark.theme-mo-blog .el-message-box__content {
+  background: var(--mo-n800);
+}
+
+/* ========== 站点设置页面暗色覆盖 ========== */
+html.dark.theme-mo-blog .el-card,
+html.dark.theme-mo-blog .el-card__body {
+  background-color: var(--mo-n800) !important;
+  border-color: var(--mo-n700) !important;
+  color: var(--mo-n300);
+}
+
+html.dark.theme-mo-blog .el-tabs__header {
+  background-color: var(--mo-n900) !important;
+}
+
+html.dark.theme-mo-blog .el-tabs__content {
+  background-color: var(--mo-n800) !important;
+}
+
+html.dark.theme-mo-blog .el-tabs__item {
+  color: var(--mo-n400) !important;
+}
+
+html.dark.theme-mo-blog .el-tabs__item:hover {
+  color: var(--mo-p300) !important;
+  background-color: var(--mo-n800) !important;
+}
+
+html.dark.theme-mo-blog .el-tabs__item.is-active {
+  color: var(--mo-p300) !important;
+  background-color: var(--mo-n800) !important;
+}
+
+html.dark.theme-mo-blog .el-switch__label {
+  color: var(--mo-n300) !important;
+}
+
+html.dark.theme-mo-blog .el-switch__label.is-active {
+  color: var(--mo-p300) !important;
+}
+
+/* ========== Auth Page 深色模式表单修复 ========== */
+/* 强制覆盖所有表单标签为深色调 */
+html.dark.theme-mo-blog .form-group label,
+html.dark.theme-mo-blog .el-form-item.form-group label,
+html.dark.theme-mo-blog .mo-auth-page .form-group label,
+html.dark.theme-mo-blog .mo-auth-page label,
+html.dark.theme-mo-blog .auth-form label,
+html.dark.theme-mo-blog .register-form label,
+html.dark.theme-mo-blog .login-form label,
+html.dark.theme-mo-blog label[class*='label'] {
+  /* 原来是浅色主题的中灰 #78716c，深色底上仅 3.16:1。用 n400 而不是 n500：
+     n500 只在 .mo-auth-page / .site-layout 的深色反转里等于 #a8a29e，
+     这些选择器也命中后台表单，那里 n500 仍是浅色的 #78716c。 */
+  color: var(--mo-n400) !important;
+}
+
+/* 输入框样式修复：描边一律用 inset box-shadow，不写真实 border。
+   Element Plus 的 .el-input__wrapper 本身没有 border，32px 高度是
+   「1px 内描边 + padding 1px」算出来的；再加 1px 实线边框会把控件撑到
+   34px，同一个表单里的输入框就和选择器、按钮以及浅色态不一致。 */
+/* 认证页专用：浅色输入卡是认证页的独立视觉，只作用于认证页作用域，
+   不能再用泛化的 .el-input__wrapper（否则会覆盖后台编辑器/表单的深色输入框）。 */
+html.dark.theme-mo-blog .mo-auth-page .el-input__wrapper,
+html.dark.theme-mo-blog .auth-form .el-input__wrapper,
+html.dark.theme-mo-blog .register-form .el-input__wrapper,
+html.dark.theme-mo-blog .login-form .el-input__wrapper {
+  background-color: var(--mo-n800) !important;
+  box-shadow: 0 0 0 1px var(--mo-n700) inset !important;
+}
+
+html.dark.theme-mo-blog .el-input__wrapper.is-focus,
+html.dark.theme-mo-blog .mo-auth-page .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1px var(--mo-p400) inset,
+    0 0 0 3px color-mix(in srgb, var(--mo-p500) 18%, transparent) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .el-input__inner {
+  color: var(--mo-n100) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .el-input__inner::placeholder {
+  color: var(--mo-n400) !important;
+}
+
+/* ===== 深色补丁：标题/正文色阶 =====
+   上面的 .theme-mo-blog 规则是浅色主题写法（n700~n900 = 深色文字），
+   而深色下 --mo-n900 被映射为页面底色，直接用会让标题与背景同色（≈1.15:1）。
+   深色下标题统一用 n200，次要文字用 n300（= #a8a29e，见 theme-dark.css 的映射）。 */
+html.dark.theme-mo-blog .popular-title,
+html.dark.theme-mo-blog .row-title,
+html.dark.theme-mo-blog .card-title,
+html.dark.theme-mo-blog .article-title,
+html.dark.theme-mo-blog .htitle {
+  color: var(--mo-n200);
+}

@@ -1,0 +1,50 @@
+# 知企建站系统主分支流水线：push 到 main 时触发，执行后端与前端全量测试构建
+version: '1.0'
+name: master-pipeline
+displayName: Main 分支测试与构建
+triggers:
+  trigger: auto
+  push:
+    branches:
+      include:
+        - main
+stages:
+  - name: backend
+    displayName: 后端编译与测试
+    strategy: naturally
+    trigger: auto
+    steps:
+      # mvn verify = 编译 + 单测 + checkstyle + JaCoCo 覆盖率门槛
+      - step: build@maven
+        name: backend_maven
+        displayName: Maven 编译与测试
+        jdkVersion: 17
+        mavenVersion: 3.6.3
+        commands:
+          # Gitee Go 镜像缺 libfreetype.so.6，水印测试需要；yum 不可用时忽略
+          - yum install -y freetype || true
+          - mvn -B clean verify
+        artifacts:
+          - name: BACKEND_JAR
+            path:
+              - zhi-admin/target/zhi-admin.jar
+  - name: frontend
+    displayName: 前端检查与构建
+    strategy: naturally
+    trigger: auto
+    steps:
+      # Vite 7 需要 Node >= 20.19，下方命令自带 Node 22.14.0 兜底
+      - step: build@nodejs
+        name: frontend_node
+        displayName: Node 检查与构建
+        nodeVersion: '22'
+        commands:
+          # Gitee Go Node 插件可能不提供 npm（nodeVersion 不受支持时），自带 Node 22.14.0 兜底
+          - wget -qO- https://cdn.npmmirror.com/binaries/node/v22.14.0/node-v22.14.0-linux-x64.tar.gz | tar -xz -C /opt || true
+          - export PATH=/opt/node-v22.14.0-linux-x64/bin:$PATH
+          - node -v && npm -v
+          - cd zhi-ui && npm config set registry https://registry.npmmirror.com && npm ci && npm run lint:check && npm run format:check && npm run typecheck && npm run test:coverage && npm run build:prod
+        artifacts:
+          - name: FRONTEND_DIST
+            path:
+              - zhi-ui/dist

@@ -1,0 +1,166 @@
+# 知企建站系统发布流水线：打 v* 开头的 tag 时触发（如 v1.0.0），构建测试 + 自动创建 GitHub Release + 部署骨架
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: 测试与构建
+    # 钉 24.04：ubuntu-latest 自 2026-10-19 迁移 Ubuntu 26，适配后再放开
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: 校验 tag 与 pom 版本一致
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          POM_VERSION=$(grep -m1 '<version>' pom.xml | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/')
+          echo "tag=${TAG_VERSION} pom=${POM_VERSION}"
+          [ "${TAG_VERSION}" = "${POM_VERSION}" ] || { echo "::error::tag ${GITHUB_REF_NAME} 与 pom 版本 ${POM_VERSION} 不一致"; exit 1; }
+      - name: Maven 编译与测试
+        run: mvn -B clean verify
+      - name: 上传后端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jar
+          path: zhi-admin/target/zhi-admin.jar
+          if-no-files-found: error
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: zhi-ui/package-lock.json
+      - name: 前端依赖安装
+        run: npm ci
+        working-directory: zhi-ui
+      - name: 依赖漏洞审计
+        run: npm run audit
+        working-directory: zhi-ui
+      - name: 前端检查与测试
+        run: npm run lint:check && npm run format:check && npm run typecheck && npm run test:coverage && npm run build:prod
+        working-directory: zhi-ui
+      - name: 上传前端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: zhi-ui/dist
+          if-no-files-found: error
+      - name: 校验运维脚本语法
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f"
+            echo "OK: $f"
+          done
+      - name: 准备部署配套
+        run: |
+          mkdir -p deploy-assets
+          # 整个 sql 目录（00 初始化脚本 + 全部 99_*.sql 存量补丁 + README）随包发布，
+          # 客户升级时不会漏掉某个补丁；scripts 为备份/恢复/升级脚本
+          cp -r sql deploy-assets/sql
+          cp -r scripts deploy-assets/scripts
+          cp zhi-ui/nginx.conf deploy-assets/
+          cp zhi-ui/nginx-https.conf deploy-assets/
+          cp .env.example deploy-assets/
+          cp docs/DEPLOYMENT_RELEASE.md docs/BACKUP_RESTORE.md deploy-assets/
+          # release 编排通过 extends 引用 docker-compose.base.yml，两个文件必须一起发布
+          cp docker-compose.release.yml deploy-assets/
+          cp docker-compose.base.yml deploy-assets/
+          cp -r prometheus deploy-assets/
+          cp -r grafana deploy-assets/
+          cd deploy-assets && zip -qr ../deploy-assets.zip .
+      - name: 上传部署配套
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-assets
+          path: deploy-assets.zip
+          if-no-files-found: error
+
+  publish:
+    name: 发布 GitHub Release
+    # 钉 24.04：ubuntu-latest 自 2026-10-19 迁移 Ubuntu 26，适配后再放开
+    runs-on: ubuntu-24.04
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: backend-jar
+          path: release/backend
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: release/frontend
+      - uses: actions/download-artifact@v8
+        with:
+          name: deploy-assets
+          path: release/deploy-assets
+      - name: 打包前端产物
+        run: cd release/frontend && zip -qr ../frontend-dist.zip .
+      - name: 解析发行说明（docs/releases/<tag>.md）
+        id: notes
+        run: |
+          NOTES_FILE="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "${NOTES_FILE}" ]; then
+            echo "file=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
+            echo "使用发行说明：${NOTES_FILE}"
+          else
+            echo "file=" >> "$GITHUB_OUTPUT"
+            echo "::warning::未找到 ${NOTES_FILE}，回落到自动生成的说明文字"
+          fi
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 同 tag 已存在 Release 时先删除，保证重复发布可覆盖
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 && gh release delete "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --yes || true
+          # 优先用仓库里的 docs/releases/<tag>.md（与 Gitee、README 共用同一份发行说明）
+          NOTES_ARGS=(--notes "知企建站系统 ${GITHUB_REF_NAME} 自动发布构建（GitHub Actions 生成）。包含：后端 jar、前端 dist、部署配套（sql / nginx / compose 编排 / .env 示例），部署步骤见 docs/DEPLOYMENT_RELEASE.md。")
+          if [ -n "${{ steps.notes.outputs.file }}" ]; then
+            NOTES_ARGS=(--notes-file "${{ steps.notes.outputs.file }}")
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            release/backend/zhi-admin.jar \
+            release/frontend-dist.zip \
+            release/deploy-assets/deploy-assets.zip \
+            --title "知企建站系统 ${GITHUB_REF_NAME}" \
+            "${NOTES_ARGS[@]}"
+
+  # ------------------------------------------------------------------
+  # 部署骨架：在 GitHub 仓库 Settings -> Secrets and variables 配置
+  # SERVER_HOST / SERVER_USER / SSH_PRIVATE_KEY 后，取消下方注释即可。
+  # 敏感信息请全部走 Secrets，不要写进本文件。
+  # ------------------------------------------------------------------
+  # deploy:
+  #   name: 发布部署
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - uses: actions/download-artifact@v8
+  #       with:
+  #         name: backend-jar
+  #         path: deploy/backend
+  #     - uses: actions/download-artifact@v8
+  #       with:
+  #         name: frontend-dist
+  #         path: deploy/frontend
+  #     - name: SSH 部署
+  #       uses: appleboy/ssh-action@v1.2.0
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }}
+  #         username: ${{ secrets.SERVER_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           cd /path/to/zhienterprise
+  #           docker compose -f docker-compose.prod.yml pull
+  #           docker compose -f docker-compose.prod.yml up -d

@@ -1,0 +1,268 @@
+/* 全局深色模式主题定义 */
+
+/* 默认主题深色：映射 --mo-n* 到 --el-* 变量（Tech Blue 深蓝） */
+html.dark .site-layout,
+html.dark .mo-auth-page,
+html.dark .mo-home-page {
+  --mo-n900: var(--el-bg-color);
+  --mo-n800: var(--el-bg-color-overlay);
+  --mo-n700: var(--el-border-color);
+  --mo-n500: var(--el-text-color-regular);
+  --mo-n400: var(--el-text-color-regular);
+  --mo-n300: var(--el-text-color-regular);
+  --mo-n200: var(--el-text-color-primary);
+  --mo-n100: var(--el-text-color-primary);
+  --mo-p50: color-mix(in srgb, var(--theme-primary) 16%, #141414);
+  --mo-p300: color-mix(in srgb, var(--theme-primary) 55%, #fff);
+  --mo-p500: color-mix(in srgb, var(--theme-primary) 78%, #fff);
+
+  --mo-n0: var(--el-bg-color-overlay);
+  --mo-n50: var(--el-bg-color);
+  --mo-n600: var(--el-text-color-primary);
+  --mo-bg: var(--el-bg-color);
+  --mo-bg-card: var(--el-bg-color-overlay);
+  --mo-border: var(--el-border-color);
+
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+}
+
+/* ===== 暗色模式：Element 主色由主题色提亮派生 =====
+   handleThemeStyle 写的是「亮色模式」主色；深色主题色（如 #334155）直接用在
+   深底上，按钮/链接/聚焦边框都会低对比。这里在暗色下把主色向白混合一档，
+   并同步 light/dark 变体与配对前景色。
+   企业模板页（html.tpl-site）排除在外：继续使用行业模板主色（见 site-templates.scss）。 */
+html.dark:not(.tpl-site) {
+  --el-color-primary: color-mix(in srgb, var(--theme-primary) 55%, #fff) !important;
+  --el-color-primary-light-3: color-mix(in srgb, var(--theme-primary) 45%, #fff) !important;
+  --el-color-primary-light-5: color-mix(in srgb, var(--theme-primary) 32%, #fff) !important;
+  --el-color-primary-light-7: color-mix(in srgb, var(--theme-primary) 26%, #1d1d1d) !important;
+  --el-color-primary-light-8: color-mix(in srgb, var(--theme-primary) 18%, #1d1d1d) !important;
+  --el-color-primary-light-9: color-mix(in srgb, var(--theme-primary) 12%, #1d1d1d) !important;
+  --el-color-primary-dark-2: color-mix(in srgb, var(--theme-primary) 45%, #fff) !important;
+  --mo-on-primary: #06272e !important;
+}
+
+/* Mo-Blog 主题深色：恢复棕色色阶
+   注意：n300/n400 在浅色主题里是「次要文字色」（中灰 #d6d3d1 / #a8a29e），
+   深色下必须仍是浅灰；曾误映射为 #57534e / #78716c（比卡片背景还深），
+   导致全站导航/页脚/文章摘要/元信息对比度只有 1.99~3.65:1。 */
+html.dark.theme-mo-blog .site-layout,
+html.dark.theme-mo-blog .mo-auth-page,
+html.dark.theme-mo-blog .mo-home-page {
+  --mo-n900: #1c1917;
+  --mo-n800: #292524;
+  --mo-n700: #44403c;
+  --mo-n500: #a8a29e;
+  --mo-n400: #a8a29e;
+  --mo-n300: #a8a29e;
+  --mo-n200: #d6d3d1;
+  --mo-n100: #f5f5f4;
+  --mo-p50: color-mix(in srgb, var(--theme-primary) 16%, #1c1917);
+  --mo-p300: color-mix(in srgb, var(--theme-primary) 55%, #fff);
+  --mo-p500: color-mix(in srgb, var(--theme-primary) 78%, #fff);
+
+  --mo-n0: #292524;
+  --mo-n50: #1c1917;
+  --mo-n600: #d6d3d1;
+  --mo-bg: #1c1917;
+  --mo-bg-card: #292524;
+  --mo-border: #44403c;
+
+  /* 同一规则块里已重映射的令牌可直接引用：n900=#1c1917、n200=#d6d3d1 */
+  background: var(--mo-n900);
+  color: var(--mo-n200);
+}
+
+/* Auth Page Dark Mode Overrides */
+html.dark.theme-mo-blog .mo-auth-page {
+  background: var(--mo-bg) !important;
+}
+
+html.dark.theme-mo-blog .auth-wrapper,
+html.dark.theme-mo-blog .auth-card,
+html.dark.theme-mo-blog .login-form,
+html.dark.theme-mo-blog .auth-switch {
+  background: var(--mo-bg-card, #292524) !important;
+}
+
+html.dark.theme-mo-blog .auth-card {
+  border-color: var(--mo-border, #44403c) !important;
+  box-shadow: none !important;
+}
+
+html.dark.theme-mo-blog .auth-switch {
+  background: var(--mo-n700, #44403c) !important;
+}
+
+html.dark.theme-mo-blog .switch-item {
+  color: var(--mo-n400, #78716c) !important;
+}
+
+html.dark.theme-mo-blog .switch-item.active {
+  color: var(--mo-n100, #f5f5f4) !important;
+  background: var(--mo-n600, #44403c) !important;
+}
+
+html.dark.theme-mo-blog .auth-head h2,
+html.dark.theme-mo-blog .auth-brand,
+html.dark.theme-mo-blog .sub,
+html.dark.theme-mo-blog .remember,
+html.dark.theme-mo-blog .auth-footer {
+  color: var(--mo-n100, #f5f5f4) !important;
+}
+
+html.dark.theme-mo-blog .captcha-img {
+  border-color: var(--mo-n700, #44403c) !important;
+}
+
+/* Form labels and inputs in auth pages - more specific selectors */
+html.dark.theme-mo-blog .mo-auth-page .el-form-item.form-group label,
+html.dark.theme-mo-blog .mo-auth-page .form-group label,
+html.dark.theme-mo-blog .mo-auth-page .el-form-item__label,
+html.dark.theme-mo-blog .auth-form label,
+html.dark.theme-mo-blog .register-form label,
+html.dark.theme-mo-blog .login-form label {
+  color: var(--mo-n400, #78716c) !important;
+}
+
+/* 描边只用 inset box-shadow，不写真实 border：Element Plus 的
+   .el-input__wrapper 本来就没有边框，加 1px 边框会让控件从 32px 变 34px。 */
+html.dark.theme-mo-blog .mo-auth-page .el-input__wrapper,
+html.dark.theme-mo-blog .auth-form .el-input__wrapper,
+html.dark.theme-mo-blog .register-form .el-input__wrapper,
+html.dark.theme-mo-blog .login-form .el-input__wrapper {
+  background-color: var(--mo-n800, #292524) !important;
+  box-shadow: 0 0 0 1px var(--mo-n700, #44403c) inset !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .el-input__wrapper.is-focus,
+html.dark.theme-mo-blog .auth-form .el-input__wrapper.is-focus,
+html.dark.theme-mo-blog .register-form .el-input__wrapper.is-focus,
+html.dark.theme-mo-blog .login-form .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1px var(--mo-p400) inset,
+    0 0 0 3px rgba(79, 70, 229, 0.14) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .el-input__inner,
+html.dark.theme-mo-blog .auth-form .el-input__inner,
+html.dark.theme-mo-blog .register-form .el-input__inner,
+html.dark.theme-mo-blog .login-form .el-input__inner {
+  color: var(--mo-n100, #f5f5f4) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .el-input__inner::placeholder,
+html.dark.theme-mo-blog .auth-form .el-input__inner::placeholder,
+html.dark.theme-mo-blog .register-form .el-input__inner::placeholder,
+html.dark.theme-mo-blog .login-form .el-input__inner::placeholder {
+  color: var(--mo-n500, #a8a29e) !important;
+}
+
+/* 强制覆盖 mo-auth-page 登录页深色模式 */
+html.dark.theme-mo-blog .mo-auth-page .auth-tabs,
+html.dark.theme-mo-blog .mo-auth-page .auth-switch,
+html.dark.theme-mo-blog .mo-auth-page .auth-card,
+html.dark.theme-mo-blog .mo-auth-page .login-form {
+  background: var(--mo-bg-card, #292524) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .auth-tabs,
+html.dark.theme-mo-blog .mo-auth-page .auth-switch {
+  border-color: var(--mo-border, #44403c) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .tab,
+html.dark.theme-mo-blog .mo-auth-page .switch-item,
+html.dark.theme-mo-blog .mo-auth-page a.tab,
+html.dark.theme-mo-blog .mo-auth-page a.switch-item {
+  color: var(--mo-n400, #78716c) !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .tab.active,
+html.dark.theme-mo-blog .mo-auth-page .switch-item.active,
+html.dark.theme-mo-blog .mo-auth-page a.tab.active,
+html.dark.theme-mo-blog .mo-auth-page a.switch-item.active {
+  background: var(--mo-n700, #292524) !important;
+  background-image: none !important;
+  color: var(--mo-n100, #f5f5f4) !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+html.dark.theme-mo-blog .site-login-container.mo-auth-page .auth-tabs .tab.active,
+html.dark.theme-mo-blog .site-login-container.mo-auth-page .auth-tabs a.tab.active,
+html.dark.theme-mo-blog .mo-auth-page .auth-switch .switch-item.active,
+html.dark.theme-mo-blog .mo-auth-page .auth-switch a.switch-item.active {
+  background: var(--mo-n700, #292524) !important;
+  background-image: none !important;
+  color: var(--mo-n100, #f5f5f4) !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .auth-submit,
+html.dark.theme-mo-blog .mo-auth-page .el-button--primary.auth-submit {
+  background: var(--mo-p600, #4f46e5) !important;
+  color: var(--mo-n100, #f5f5f4) !important;
+  border-color: transparent !important;
+}
+
+html.dark.theme-mo-blog .mo-auth-page .auth-secondary,
+html.dark.theme-mo-blog .mo-auth-page .auth-secondary:hover {
+  background: var(--mo-n700, #292524) !important;
+  color: var(--mo-n100, #f5f5f4) !important;
+  border-color: var(--mo-n700, #292524) !important;
+}
+
+/* SiteLayout Dark Mode Overrides */
+html.dark .site-top-nav {
+  border-bottom-color: var(--mo-n700);
+  background: color-mix(in srgb, var(--mo-n900) 92%, transparent);
+}
+
+html.dark .brand-name,
+html.dark .username,
+html.dark .footer-col h4 {
+  color: var(--mo-n100);
+}
+
+html.dark .nav-link,
+html.dark .footer-col a,
+html.dark .site-footer,
+html.dark .brand-desc,
+html.dark .footer-bottom {
+  color: var(--mo-n300);
+}
+
+html.dark .nav-link:hover,
+html.dark .nav-link.router-link-active,
+html.dark .theme-btn,
+html.dark .footer-col a:hover {
+  color: var(--mo-p300);
+}
+
+html.dark .nav-link:hover,
+html.dark .nav-link.router-link-active,
+html.dark .user-info:hover,
+html.dark .theme-btn:hover {
+  background: var(--mo-p50);
+}
+
+html.dark .site-footer {
+  border-top-color: var(--mo-n700);
+  background: var(--mo-n800);
+}
+
+html.dark .footer-wave {
+  color: var(--mo-n900);
+}
+
+html.dark .footer-inner {
+  border-bottom-color: var(--mo-n700);
+}
+
+html.dark .footer-logo {
+  background: rgba(79, 70, 229, 0.18);
+  color: var(--mo-p300);
+}

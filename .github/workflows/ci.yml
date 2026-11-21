@@ -1,0 +1,87 @@
+# 知企建站系统 CI：push 到任意分支或向 main 发起 PR 时触发，与 Gitee Go 流水线逻辑一致
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: 后端编译与测试
+    # 钉 24.04：ubuntu-latest 自 2026-10-19 迁移 Ubuntu 26，适配后再放开
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      # mvn verify = 编译 + 单测 + checkstyle + JaCoCo 覆盖率门槛
+      - name: Maven 编译与测试
+        run: mvn -B clean verify
+      - name: 上传后端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jar
+          path: zhi-admin/target/zhi-admin.jar
+          retention-days: 7
+          if-no-files-found: error
+
+  frontend:
+    name: 前端检查与构建
+    # 钉 24.04：ubuntu-latest 自 2026-10-19 迁移 Ubuntu 26，适配后再放开
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: zhi-ui
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: zhi-ui/package-lock.json
+      - run: npm ci
+      # 依赖漏洞闸门：只查产线依赖（dev 工具链的 CVE 不进发布物），high 及以上直接阻断
+      # 走 npm run audit，把 registry 钉在 npmjs：npmmirror 未实现 /-/npm/v1/security/* 端点
+      - name: 依赖漏洞审计
+        run: npm run audit
+      - run: npm run lint:check
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build:prod
+      - name: 上传前端产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: zhi-ui/dist
+          retention-days: 7
+          if-no-files-found: error
+
+  compose:
+    name: 编排与运维脚本校验
+    # 三套环境编排 + 公共片段（docker-compose.base.yml）必须保持可解析；
+    # 三套都通过 extends 引用公共片段，改公共段时最容易漏掉某套
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: 校验 Docker Compose 编排
+        run: |
+          # 用示例环境变量做插值校验，CI 里没有本地 .env
+          cp .env.example .env
+          for f in docker-compose.base.yml docker-compose.dev.yml docker-compose.prod.yml docker-compose.release.yml; do
+            docker compose -f "$f" config -q
+            echo "OK: $f"
+          done
+      - name: 校验运维脚本语法
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f"
+            echo "OK: $f"
+          done

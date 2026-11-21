@@ -1,0 +1,111 @@
+# 后端构建产物
+*.log
+*.class
+*.jar
+*.war
+logs/
+uploadPath/
+target/
+*.iml
+*.class
+
+# 发行版部署目录（由 release 附件解压生成：jar / frontend-dist / nginx.conf / ssl，不入库）
+deploy/
+
+# Eclipse 构建产物（包含硬编码默认密码，不应提交）
+zhi-admin/bin/
+
+# Git Hooks (husky 需要提交)
+!.husky/**
+
+# iFlow CLI 个人配置（不应提交）
+.iflow/
+
+# SonarLint 个人配置（不应提交）
+.sonarlint/
+
+# Playwright CLI 临时运行目录（不应提交）
+.playwright-cli/
+
+# 备份文件
+*.bak
+*.bak2
+*.bak3
+
+# 前端临时测试文件
+cookies.txt
+test-*.html
+test-*.js
+zhi-ui/debug.html
+*.yaml
+
+# 构建产物与依赖
+node_modules/
+dist/
+zhi-ui/stats.html
+/build/
+# 忽略后端静态目录里的构建产物
+zhi-admin/src/main/resources/static/static/js/
+zhi-admin/src/main/resources/static/static/css/
+# 忽略所有构建输出，但保留必要的默认头像文件
+zhi-admin/src/main/resources/static/static/
+!zhi-admin/src/main/resources/static/default-avatar.jpg
+!zhi-admin/src/main/resources/static/default-avatar.svg
+!zhi-admin/src/main/resources/static/favicon.ico
+!zhi-admin/src/main/resources/static/index.html
+
+# 测试输出目录
+zhi-system/null/
+
+
+
+# Cypress自动生成文件（如果你用在前端）
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+
+# IDE及系统文件
+.DS_Store
+.idea/
+# .vscode/ 需要提交（包含项目配置）
+!.vscode/
+# 本地调试配置不入库
+.vscode/launch.json
+.claude/
+.trae/
+*.swp
+*.swo
+
+
+# 其它配置文件
+.env
+# .env.example 需要提交到版本控制系统（作为配置模板）
+!.env.example
+.npmrc
+# .prettierignore 需要提交
+!.prettierignore
+.cursor
+dump.rdb
+*.rdb
+
+# 代码规范工具生成文件
+target/checkstyle-result.xml
+target/checkstyle-result.html
+target/checkstyle-checker.xml
+.eslintcache
+
+# 测试覆盖率报告
+target/jacoco.exec
+target/jacoco/
+coverage/
+.nyc_output/
+
+# 项目文档
+IFLOW.md
+
+CODEBUDDY.md
+
+# SonarQube 配置（包含敏感信息）
+sonar-project.properties
+# SonarQube 配置模板（需要提交）
+!sonar-project.properties.example

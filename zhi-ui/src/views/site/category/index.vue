@@ -1,0 +1,699 @@
+<template>
+  <div class="category-container tpl-legacy">
+    <!-- 站点导航 -->
+    <SiteLayout>
+      <!-- 分类头部 -->
+      <div class="category-header tpl-legacy">
+        <div class="header-content">
+          <div class="category-info">
+            <h1 class="category-title">
+              {{ categoryName || '文章分类' }}
+            </h1>
+            <p class="category-description">
+              {{ categoryDescription || `浏览分类"${categoryName}"下的所有文章` }}
+            </p>
+            <div class="category-stats">
+              <span class="stat-item">
+                <el-icon><DocumentCopy /></el-icon>
+                {{ total }} 篇文章
+              </span>
+            </div>
+          </div>
+
+          <!-- 返回按钮 -->
+          <div class="back-button">
+            <router-link to="/" class="back-link">
+              <el-button type="default" plain>
+                <el-icon><ArrowLeft /></el-icon>
+                返回首页
+              </el-button>
+            </router-link>
+          </div>
+        </div>
+      </div>
+
+      <!-- 主要内容区域 -->
+      <div class="category-main tpl-legacy">
+        <div class="main-content">
+          <!-- 加载状态 -->
+          <ArticleListSkeleton v-if="loading" />
+
+          <!-- 空状态 -->
+          <ArticleEmptyState
+            v-else-if="articleList.length === 0"
+            :icon="DocumentCopy"
+            description="该分类下还没有文章，敬请期待..."
+          />
+
+          <!-- 文章列表 -->
+          <div v-else class="article-list">
+            <ArticleCard
+              v-for="(article, index) in articleList"
+              :key="article.id"
+              :article="article"
+              :index="index"
+            />
+          </div>
+
+          <!-- 加载更多 -->
+          <div v-if="articleList.length < total && !loading" class="load-more-container">
+            <el-button type="primary" :loading="loadingMore" round @click="loadMoreArticles">
+              {{ loadingMore ? '加载中...' : '加载更多' }}
+            </el-button>
+          </div>
+
+          <!-- 分页 -->
+          <SitePager
+            :total="total"
+            :page-size="queryParams.pageSize"
+            :page-num="queryParams.pageNum"
+            @page-change="handlePageChange"
+          />
+        </div>
+      </div>
+
+      <!-- 站点底部 -->
+    </SiteLayout>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+
+import { useRoute } from 'vue-router'
+
+import { ElMessage } from '@/plugins/element-plus-service'
+
+import SiteLayout from '@/components/SiteLayout.vue'
+import ArticleCard from '@/components/ArticleCard.vue'
+import ArticleEmptyState from '@/components/ArticleEmptyState.vue'
+import ArticleListSkeleton from '@/components/ArticleListSkeleton.vue'
+import SitePager from '@/components/SitePager.vue'
+
+import { getCategoryDetail } from '@/api/site/category'
+
+import { getArticleList } from '@/api/site/article'
+
+import { getSiteSettingsAnonymous } from '@/api/site/setting'
+
+import { useSiteSettingsStore } from '@/stores/siteSettings'
+import { logger } from '@/utils/logger'
+import { createRequestGuard } from '@/utils/requestGuard'
+import {
+  ArrowLeft,
+  Calendar,
+  CollectionTag,
+  DocumentCopy,
+  Menu,
+  Share,
+  StarFilled
+} from '@element-plus/icons-vue'
+
+const route = useRoute()
+
+// 陈旧响应守卫：/category/:id 复用同一组件，快速切换分类时慢响应不得覆盖新分类
+const categoryGuard = createRequestGuard()
+
+const siteSettingsStore = useSiteSettingsStore()
+
+// 响应式数据
+
+const articleList = ref([])
+
+const categoryName = ref('')
+
+const categoryDescription = ref('')
+
+const total = ref(0)
+
+const loading = ref(false)
+
+const loadingMore = ref(false)
+
+const currentCategoryId = ref(null)
+
+// 路由参数（数字 ID 或 alias 伪静态别名）
+const currentCategoryKey = ref('')
+
+const lastUpdateTime = ref('')
+
+const siteSettings = computed(() => siteSettingsStore.siteSettings)
+
+// 查询参数
+const queryParams = reactive({
+  pageNum: 1,
+  pageSize: 10,
+  categoryId: null,
+  status: 1 // 只显示已发布的文章
+})
+
+// 获取分类文章列表（token：路由切换驱动的请求，用于丢弃陈旧响应）
+const loadCategoryArticles = async (append = false, page?: number, token?: number) => {
+  // 加载更多时页码只有在成功后提交，失败重试不会跳页
+  const requestedPage = page ?? queryParams.pageNum
+  try {
+    loading.value = !append
+    if (append) loadingMore.value = true
+
+    const response = await getArticleList({
+      ...queryParams,
+      pageNum: requestedPage,
+      categoryId: queryParams.categoryId
+    })
+    if (token !== undefined && !categoryGuard.isLatest(token)) return
+
+    const newArticles = response.rows || []
+    if (append) {
+      articleList.value = [...articleList.value, ...newArticles]
+    } else {
+      articleList.value = newArticles
+    }
+    total.value = response.total || 0
+    // 只有成功才提交页码：失败后"加载更多"不会跳过一页
+    if (append) queryParams.pageNum = requestedPage
+  } catch (error) {
+    if (token !== undefined && !categoryGuard.isLatest(token)) return
+    logger.error('获取分类文章失败:', error)
+    ElMessage.error('获取文章列表失败')
+  } finally {
+    if (token === undefined || categoryGuard.isLatest(token)) {
+      loading.value = false
+      loadingMore.value = false
+    }
+  }
+}
+
+// 加载站点设置
+const loadSiteSettings = async () => {
+  try {
+    const response = await getSiteSettingsAnonymous()
+    const settings = response || {}
+    // 更新 siteSettingsStore
+    siteSettingsStore.updateSiteSettings(settings)
+  } catch (error) {
+    logger.error('加载站点设置失败:', error)
+    // 使用默认值
+  }
+}
+
+// 获取分类详情（按数字 ID 或 alias 解析），成功时回填数字 ID 供文章列表过滤
+const loadCategoryDetail = async (token: number): Promise<boolean> => {
+  try {
+    const response = await getCategoryDetail(currentCategoryKey.value)
+    if (!categoryGuard.isLatest(token)) return false
+
+    const category = response.data || response
+    if (!category || !category.id) return false
+    currentCategoryId.value = category.id
+    queryParams.categoryId = category.id
+    categoryName.value = category.name || ''
+    categoryDescription.value = category.description || ''
+    lastUpdateTime.value = formatDate(new Date().toISOString())
+    return true
+  } catch (error) {
+    if (!categoryGuard.isLatest(token)) return false
+    logger.error('获取分类详情失败:', error)
+    return false
+  }
+}
+
+// 按路由标识初始化分类页：解析成功加载该分类，失败（含 alias 未命中）回退全部文章
+const initCategoryPage = async (token: number) => {
+  const ok = await loadCategoryDetail(token)
+  // 分类已再次切换：本次结果整体作废，由最新一次请求收尾
+  if (!categoryGuard.isLatest(token)) return
+  if (ok) {
+    loadCategoryArticles(false, undefined, token)
+  } else {
+    logger.warn('分类不存在或未启用，回退全部文章:', currentCategoryKey.value)
+    resetToAllCategories(token)
+  }
+}
+
+// 重置为「所有分类」视图
+const resetToAllCategories = (token?: number) => {
+  currentCategoryId.value = null
+  currentCategoryKey.value = ''
+  queryParams.categoryId = null
+  queryParams.pageNum = 1
+  categoryName.value = '所有分类'
+  categoryDescription.value = '浏览所有分类下的文章'
+  loadCategoryArticles(false, undefined, token)
+}
+
+// 加载更多文章（各自取新 token：切换分类后迟到的旧分页不能追加到新列表）
+const loadMoreArticles = () => {
+  if (loadingMore.value || articleList.value.length >= total.value) return
+  loadCategoryArticles(true, queryParams.pageNum + 1, categoryGuard.next())
+}
+
+// 分页处理
+const handlePageChange = page => {
+  queryParams.pageNum = page
+  loadCategoryArticles(false, undefined, categoryGuard.next())
+}
+
+// 日期格式化
+const formatDate = (dateString, format = 'full') => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+
+  if (format === 'MM-dd') {
+    return date.toLocaleDateString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit'
+    })
+  }
+
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
+// 根据文章数量计算标签字体大小
+const getTagFontSize = count => {
+  if (count >= 10) return 16
+  if (count >= 5) return 14
+  if (count >= 2) return 12
+  return 11
+}
+
+// 根据标签数量计算缩放比例
+const getTagScale = count => {
+  if (count >= 10) return 1.1
+  if (count >= 5) return 1.05
+  if (count >= 2) return 1.0
+  return 0.95
+}
+
+// 监听路由变化，Vue 3 会自动清理
+watch(
+  () => route.params.id,
+  newKey => {
+    const token = categoryGuard.next()
+    if (newKey) {
+      // 路由参数兼容数字 ID（历史链接）与 alias 伪静态链接：先解析分类，再按解析出的数字 ID 加载文章
+      currentCategoryKey.value = String(newKey)
+      queryParams.pageNum = 1
+      initCategoryPage(token)
+    } else {
+      // 没有分类标识，显示所有分类列表
+      resetToAllCategories(token)
+    }
+  },
+  { immediate: true }
+)
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadSiteSettings()
+})
+</script>
+
+<style scoped>
+.category-container {
+  padding-top: var(--mo-sp-10);
+  min-height: 100vh;
+  background: var(--mo-n50);
+}
+
+.category-header {
+  background: var(--mo-n50);
+  color: var(--mo-n900);
+  padding: 60px 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--mo-n200);
+}
+
+.category-header::before {
+  content: none;
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--mo-sp-5);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mo-sp-8);
+}
+
+.category-info {
+  flex: 1;
+  text-align: left;
+}
+
+.category-title {
+  font-size: var(--mo-fs-6xl);
+  margin: 0 0 var(--mo-sp-5) 0;
+  font-weight: 700;
+  color: var(--mo-n900);
+}
+
+.category-description {
+  font-size: 1.3rem;
+  color: var(--mo-n600);
+  margin: 0 0 var(--mo-sp-5) 0;
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.category-stats {
+  display: flex;
+  gap: var(--mo-sp-5);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: var(--mo-sp-2);
+  font-size: var(--mo-fs-md);
+  color: var(--mo-n500);
+}
+
+.stat-item .el-icon {
+  font-size: 1.1rem;
+}
+
+.back-button {
+  flex-shrink: 0;
+}
+
+.back-link {
+  text-decoration: none;
+}
+
+.category-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--mo-sp-8) var(--mo-sp-5);
+  gap: var(--mo-sp-8);
+}
+
+.main-content {
+  min-width: 0;
+}
+
+.article-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 30px;
+  margin-bottom: var(--mo-sp-5);
+}
+
+.recent-item {
+  background: var(--tpl-bg, #fff);
+  border-radius: var(--mo-r-md);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  border-color: color-mix(in srgb, var(--mo-p600) 10%, transparent);
+}
+
+.recent-title {
+  margin: 0 0 15px 0;
+  font-size: var(--mo-fs-2xl);
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.category-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(102, 102, 102, 0.05);
+  padding: var(--mo-sp-1) var(--mo-sp-2);
+  border-radius: var(--mo-r-sm);
+  transition: background-color 0.3s ease;
+}
+
+.category-meta-item:hover {
+  background: color-mix(in srgb, var(--mo-p600) 10%, transparent);
+  color: var(--mo-p600);
+}
+
+.category-meta-item .el-icon {
+  font-size: var(--mo-fs-md);
+  opacity: 0.8;
+}
+
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--mo-sp-8);
+  padding-bottom: var(--mo-sp-5);
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .category-main {
+    max-width: 100%;
+    padding: 30px 20px;
+    gap: 30px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .category-main {
+    gap: 25px;
+  }
+}
+
+@media (max-width: 768px) {
+  .category-header {
+    padding: var(--mo-sp-8) 0;
+  }
+
+  .header-content {
+    flex-direction: column;
+    gap: 30px;
+    text-align: center;
+  }
+
+  .category-info {
+    text-align: center;
+  }
+
+  .category-title {
+    font-size: 2.2rem;
+  }
+
+  .category-description {
+    font-size: 1.1rem;
+    padding: 0 var(--mo-sp-5);
+  }
+
+  .category-stats {
+    justify-content: center;
+  }
+
+  .category-main {
+    grid-template-columns: 1fr;
+    padding: 20px 15px;
+    gap: 25px;
+  }
+
+  .main-content {
+    order: 1;
+  }
+
+  .recent-item {
+    margin-bottom: var(--mo-sp-5);
+  }
+
+  .recent-title {
+    font-size: 1.4rem;
+  }
+
+  .tag-cloud {
+    gap: var(--mo-sp-2);
+  }
+
+  .tag-item {
+    padding: var(--mo-sp-1) var(--mo-sp-2);
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-content {
+    padding: 0 15px;
+  }
+
+  .category-title {
+    font-size: 1.8rem;
+    line-height: 1.2;
+  }
+
+  .category-description {
+    font-size: var(--mo-fs-md);
+    line-height: 1.4;
+  }
+
+  .category-stats {
+    flex-direction: column;
+    gap: var(--mo-sp-3);
+    align-items: center;
+  }
+
+  .stat-item {
+    font-size: 0.9rem;
+  }
+
+  .category-main {
+    padding: 15px 10px;
+  }
+
+  .recent-item {
+    border-radius: var(--mo-r-sm);
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .recent-title {
+    font-size: var(--mo-fs-xl);
+    margin-bottom: var(--mo-sp-3);
+  }
+
+  .widget-title {
+    font-size: var(--mo-fs-md);
+    margin-bottom: var(--mo-sp-3);
+  }
+}
+
+/* 深色主题适配 */
+html.dark .category-container {
+  background-color: var(--mo-n900);
+}
+
+html.dark .category-header {
+  background: var(--mo-n900);
+  border-bottom-color: var(--mo-n800);
+}
+
+html.dark .category-title {
+  color: var(--mo-n100);
+}
+
+html.dark .category-description {
+  color: var(--mo-n400);
+}
+
+html.dark .stat-item {
+  color: var(--mo-n400);
+}
+
+html.dark .recent-item {
+  background: var(--mo-n800);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border-color: var(--mo-n800);
+}
+
+html.dark .recent-item:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  border-color: color-mix(in srgb, var(--mo-p600) 20%, transparent);
+}
+
+html.dark .category-meta-item {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--mo-n400);
+}
+
+html.dark .category-meta-item:hover {
+  background: color-mix(in srgb, var(--mo-p600) 15%, transparent);
+  color: var(--mo-p300);
+}
+
+html.dark .widget-title {
+  color: var(--mo-n200);
+  border-bottom-color: var(--mo-p600);
+}
+
+html.dark .category-icon {
+  color: var(--mo-p300);
+}
+
+html.dark .category-about .category-name {
+  color: var(--mo-n200);
+}
+
+html.dark .category-about .category-desc {
+  color: var(--mo-n400);
+}
+
+html.dark .category-meta .category-meta-item {
+  color: var(--mo-n400);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .category-link {
+  color: var(--mo-n400);
+}
+
+html.dark .category-link:hover,
+html.dark .category-link.active {
+  background: color-mix(in srgb, var(--mo-p600) 15%, transparent);
+  color: var(--mo-p300);
+}
+
+html.dark .category-count {
+  color: var(--mo-n500);
+}
+
+html.dark .tag-item {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+html.dark .tag-item:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .recent-articles .recent-item {
+  border-bottom-color: var(--mo-n800);
+}
+
+html.dark .recent-link {
+  color: var(--mo-n400);
+}
+
+html.dark .recent-link:hover {
+  color: var(--mo-p300);
+}
+
+html.dark .recent-date {
+  color: var(--mo-n500);
+}
+
+/* p600/p700 不参与深色重映射，深色下强调色文字统一改用 p300 */
+html.dark .tag-item {
+  color: var(--mo-p300);
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
